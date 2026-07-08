@@ -1,6 +1,8 @@
 from textual.message import Message
 
-from gitph.domain.models import ActionPlan, GitRef
+from gitph.domain.models import ActionPlan, GitRef, UiAction
+
+MenuChoice = ActionPlan | UiAction
 
 
 class RefSelected(Message):
@@ -38,7 +40,7 @@ class GitActionRequested(Message):
 class ContextMenuRequested(Message):
     """Message emitted when the user requests a menu of available actions."""
 
-    def __init__(self, plans: tuple[ActionPlan, ...], title: str = "Git actions") -> None:
+    def __init__(self, plans: tuple[MenuChoice, ...], title: str = "Git actions") -> None:
         super().__init__()
         self.plans = plans
         self.title = title

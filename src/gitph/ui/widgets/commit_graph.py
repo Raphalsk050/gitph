@@ -1,9 +1,10 @@
 from rich.text import Text
+from textual import events
 from textual.widgets import OptionList
 from textual.widgets._option_list import Option
 
-from gitph.domain.events import CommitSelected
-from gitph.domain.models import GraphModel, GraphRow
+from gitph.domain.events import CommitSelected, ContextMenuRequested
+from gitph.domain.models import GraphModel, GraphRow, UiAction
 
 
 class CommitGraphPane(OptionList):
@@ -50,6 +51,39 @@ class CommitGraphPane(OptionList):
         oid = self._oid_by_option_id.get(event.option_id)
         if oid is not None:
             self.post_message(CommitSelected(oid))
+
+    def on_mouse_down(self, event: events.MouseDown) -> None:
+        if event.button != 3:
+            return
+        event.stop()
+        event.prevent_default()
+        meta = event.style.meta if event.style is not None else {}
+        option_index = meta.get("option")
+        if not isinstance(option_index, int):
+            return
+        if option_index < 0 or option_index >= self.option_count:
+            return
+        option = self.get_option_at_index(option_index)
+        if option.disabled or option.id is None:
+            return
+        oid = self._oid_by_option_id.get(option.id)
+        if oid is None:
+            return
+        self.highlighted = option_index
+        self.selected_oid = oid
+        self.post_message(CommitSelected(oid))
+        self.post_message(
+            ContextMenuRequested(
+                (
+                    UiAction(
+                        id="copy_commit_oid",
+                        label=f"Copy {oid[:8]} hash",
+                        target=oid,
+                    ),
+                ),
+                f"Commit actions: {oid[:8]}",
+            )
+        )
 
     def _rebuild_options(self) -> None:
         self.clear_options()

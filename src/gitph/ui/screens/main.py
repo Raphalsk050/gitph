@@ -153,14 +153,14 @@ class MainScreen(Screen[None]):
         self.query_one(DetailsPanel).show_commit(details)
         status.set_status(f"Selected {oid[:8]}")
 
-    def _menu_choices(self, plans: tuple[ActionPlan, ...]) -> tuple[UiAction | ActionPlan, ...]:
+    def _menu_choices(self, plans: tuple[UiAction | ActionPlan, ...]) -> tuple[UiAction | ActionPlan, ...]:
         return (
+            *plans,
             UiAction(
                 id="open_repository",
                 label="Open repository...",
                 target=str(self.state.repo_path),
             ),
-            *plans,
         )
 
     def _start_context_menu_flow(self, plans: tuple[UiAction | ActionPlan, ...], title: str) -> None:
@@ -186,26 +186,30 @@ class MainScreen(Screen[None]):
         await self._confirm_and_execute(choice)
 
     async def _execute_ui_action(self, action: UiAction) -> None:
-        if action.id != "open_repository":
-            self.app.notify(f"Unknown UI action: {action.id}", severity="error")
+        if action.id == "copy_commit_oid":
+            self.app.copy_to_clipboard(action.target)
+            self.app.notify(f"Copied {action.target[:8]} to clipboard.")
             return
-        selected_path = await self.app.push_screen(
-            RepositoryPickerScreen(self.state.repo_path),
-            wait_for_dismiss=True,
-        )
-        if selected_path is None:
+        if action.id == "open_repository":
+            selected_path = await self.app.push_screen(
+                RepositoryPickerScreen(self.state.repo_path),
+                wait_for_dismiss=True,
+            )
+            if selected_path is None:
+                return
+            self.state = replace(
+                self.state,
+                repo_path=selected_path,
+                snapshot=None,
+                selected_ref=None,
+                selected_commit_oid=None,
+                selected_file=None,
+                selected_details=None,
+                error=None,
+            )
+            await self.refresh_repository()
             return
-        self.state = replace(
-            self.state,
-            repo_path=selected_path,
-            snapshot=None,
-            selected_ref=None,
-            selected_commit_oid=None,
-            selected_file=None,
-            selected_details=None,
-            error=None,
-        )
-        await self.refresh_repository()
+        self.app.notify(f"Unknown UI action: {action.id}", severity="error")
 
     async def _confirm_and_execute(self, plan: ActionPlan) -> None:
         if plan.requires_confirmation:

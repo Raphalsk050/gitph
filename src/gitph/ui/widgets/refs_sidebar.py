@@ -71,9 +71,23 @@ class RefsSidebar(Tree[RefNode]):
         if event.button != 3:
             return
         event.stop()
-        plans = self.plans_for_selection()
-        if plans:
-            self.post_message(ContextMenuRequested(plans, "Ref actions"))
+        event.prevent_default()
+        meta = event.style.meta if event.style is not None else {}
+        line = meta.get("line")
+        if isinstance(line, int):
+            self.cursor_line = line
+        node = self._node_from_event(event)
+        ref = node.data.ref if node is not None and node.data is not None else None
+        plans = self.action_service.plans_for_ref(ref) if ref is not None else self.action_service.global_plans()
+        title = f"Ref actions: {ref.short_name}" if ref is not None else "Repository actions"
+        self.post_message(ContextMenuRequested(plans, title))
+
+    def _node_from_event(self, event: events.MouseDown):
+        meta = event.style.meta if event.style is not None else {}
+        line = meta.get("line")
+        if isinstance(line, int):
+            return self.get_node_at_line(line)
+        return self.cursor_node
 
     @staticmethod
     def _root_label(snapshot: RepositorySnapshot) -> Text:
