@@ -29,7 +29,7 @@ Footer {
 #commit-graph {
     width: 1fr;
     min-width: 48;
-    background: #171d20;
+    background: #141a1d;
     color: #e5e7eb;
     overflow: auto;
     padding: 0 1;
@@ -44,6 +44,8 @@ Footer {
 }
 
 #commit-graph > .option-list--option-highlighted {
+    background: #12323a;
+    color: #f4f8fb;
     text-wrap: nowrap;
     text-overflow: ellipsis;
     height: 1;

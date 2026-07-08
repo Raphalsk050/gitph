@@ -27,6 +27,7 @@ class CommitGraphPane(OptionList):
         self._oid_by_option_id: dict[str, str] = {}
         self._option_index_by_oid: dict[str, int] = {}
         self._graph_prefix_width = 2
+        self._lane_count = 1
 
     def set_graph(self, graph: GraphModel, selected_oid: str | None = None) -> None:
         self.graph = graph
@@ -58,7 +59,8 @@ class CommitGraphPane(OptionList):
             self.add_option(Option(Text("No commits found.", style="dim", no_wrap=True, end=""), id="empty"))
             return
 
-        self._graph_prefix_width = self._measure_graph_prefix_width()
+        self._lane_count = self._measure_lane_count()
+        self._graph_prefix_width = self._lane_count * 3 - 1
         selected_index: int | None = None
         for index, row in enumerate(self.graph.rows):
             option_id = f"commit-{index}"
@@ -72,31 +74,81 @@ class CommitGraphPane(OptionList):
     def _render_row(self, row: GraphRow, graph_prefix: str | None = None) -> Text:
         text = Text(no_wrap=True, overflow="ellipsis", end="")
         prefix = _graph_commit_prefix(row.commit.graph_prefix) if graph_prefix is None else graph_prefix
-        if prefix:
+        if self._can_render_layout(row):
+            self._append_layout_graph(text, row)
+        elif prefix:
             self._append_native_graph(text, prefix)
         else:
             self._append_fallback_lanes(text, row)
         refs = self._format_refs(row)
-        subject = _squash(row.commit.subject or "(no subject)", 46)
+        subject = _squash(row.commit.subject or "(no subject)", 52)
         author = _abbreviate_name(row.commit.author)
-        text.append(f" {row.commit.short_oid} ", style="bold white")
+        text.append(f" {row.commit.short_oid}", style="bold #dce7ef")
         if refs:
-            text.append(f"{refs} ", style="bold black on cyan")
-        text.append(subject, style="white")
+            text.append(" ")
+            text.append(f" {refs} ", style="bold black on #47d8c8")
+        text.append(" ")
+        text.append(subject, style="#d7ddd6")
         if author:
-            text.append(f"  {author}", style="dim")
+            text.append(f"  {author}", style="#8f9aa1")
         return text
 
-    def _measure_graph_prefix_width(self) -> int:
-        prefixes = [
-            len(_graph_commit_prefix(row.commit.graph_prefix))
-            for row in self.graph.rows
-            if _graph_commit_prefix(row.commit.graph_prefix)
-        ]
-        if not prefixes:
-            lane_width = max(1, min(max(self.graph.max_lanes, 1), 10)) * 2
-            return lane_width
-        return min(max(max(prefixes), 2), 28)
+    def _measure_lane_count(self) -> int:
+        max_lane = max(self.graph.max_lanes - 1, 0)
+        for row in self.graph.rows:
+            max_lane = max(max_lane, row.lane)
+            for edge in row.edges:
+                max_lane = max(max_lane, edge.from_lane, edge.to_lane)
+        return max(1, min(max_lane + 1, 10))
+
+    def _can_render_layout(self, row: GraphRow) -> bool:
+        if row.lane >= self._lane_count:
+            return False
+        return all(edge.from_lane < self._lane_count and edge.to_lane < self._lane_count for edge in row.edges)
+
+    def _append_layout_graph(self, text: Text, row: GraphRow) -> None:
+        width = self._graph_prefix_width
+        chars = [" "] * width
+        styles = [""] * width
+
+        for lane, oid in enumerate(row.active_lanes[: self._lane_count]):
+            if oid:
+                column = _lane_column(lane)
+                chars[column] = "│"
+                styles[column] = _lane_style(self.PALETTE, lane, dim=True)
+
+        for edge in row.edges:
+            if edge.to_lane == row.lane:
+                continue
+            start = _lane_column(row.lane)
+            end = _lane_column(edge.to_lane)
+            left, right = sorted((start, end))
+            lane_style = _lane_style(self.PALETTE, edge.to_lane)
+            for column in range(left + 1, right):
+                chars[column] = "─"
+                styles[column] = lane_style
+            chars[end] = "╭" if edge.to_lane < row.lane else "╮"
+            styles[end] = lane_style
+
+        node_column = _lane_column(row.lane)
+        chars[node_column] = self._node_glyph(row)
+        styles[node_column] = _lane_style(self.PALETTE, row.lane, strong=True)
+
+        for char, style in zip(chars, styles, strict=True):
+            if style:
+                text.append(char, style=style)
+            else:
+                text.append(char)
+        text.append(" ")
+
+    def _node_glyph(self, row: GraphRow) -> str:
+        if row.commit.oid == self.selected_oid:
+            return "◉"
+        if row.refs:
+            return "◆"
+        if len(row.commit.parents) > 1:
+            return "◉"
+        return "●"
 
     def _append_native_graph(self, text: Text, graph_prefix: str) -> None:
         prefix = graph_prefix[: self._graph_prefix_width]
@@ -203,3 +255,16 @@ def _graph_prefix_lines(value: str) -> list[str]:
 
 def _graph_commit_prefix(value: str) -> str:
     return _graph_prefix_lines(value)[-1]
+
+
+def _lane_column(lane: int) -> int:
+    return lane * 3
+
+
+def _lane_style(palette: tuple[str, ...], lane: int, *, dim: bool = False, strong: bool = False) -> str:
+    base = palette[lane % len(palette)]
+    if strong:
+        return f"bold {base}"
+    if dim:
+        return f"dim {base}"
+    return base
