@@ -181,10 +181,38 @@ button:disabled {
 .app-body {
   position: relative;
   display: grid;
-  grid-template-columns: 68px 264px minmax(420px, 1fr) minmax(350px, 410px);
+  grid-template-columns: 68px var(--sidebar-w, 264px) 1px minmax(420px, 1fr) 1px var(--details-w, 410px);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.panel-splitter {
+  position: relative;
+  z-index: 30;
+  background: transparent;
+  cursor: col-resize;
+  transition: background 150ms ease;
+}
+
+.panel-splitter::before {
+  position: absolute;
+  inset: 0 -4px;
+  content: "";
+}
+
+.panel-splitter:hover,
+body.panel-resizing .panel-splitter {
+  background: var(--accent);
+}
+
+body.panel-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.panel-resizing * {
+  cursor: col-resize !important;
 }
 
 .activity-rail {
@@ -1634,10 +1662,6 @@ input::placeholder {
 }
 
 @media (max-width: 1280px) {
-  .app-body {
-    grid-template-columns: 68px 238px minmax(390px, 1fr) 350px;
-  }
-
   .commit-row,
   .commit-columns {
     grid-template-columns: minmax(260px, 1fr) 100px 86px;
@@ -1650,7 +1674,11 @@ input::placeholder {
 
 @media (max-width: 1080px) {
   .app-body {
-    grid-template-columns: 68px 238px minmax(0, 1fr);
+    grid-template-columns: 68px var(--sidebar-w, 238px) 1px minmax(0, 1fr);
+  }
+
+  .splitter-details {
+    display: none;
   }
 
   .details-panel {
@@ -1681,6 +1709,10 @@ input::placeholder {
 @media (max-width: 800px) {
   .app-body {
     grid-template-columns: 60px minmax(0, 1fr);
+  }
+
+  .panel-splitter {
+    display: none;
   }
 
   .activity-rail {
