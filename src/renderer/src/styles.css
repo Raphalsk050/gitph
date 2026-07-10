@@ -1097,7 +1097,7 @@ input::placeholder {
 }
 
 .changed-files,
-.diff-viewer {
+.diff-pane {
   flex: 1;
   min-height: 0;
   margin: 0;
@@ -1172,14 +1172,256 @@ input::placeholder {
   color: #e8938f;
 }
 
-.diff-viewer {
-  padding: 13px 15px 40px;
+.diff-pane {
+  padding: 0 10px 30px;
   background: var(--bg-deep);
+}
+
+.diff-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
   color: #c4c0b6;
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.55;
+  font-size: var(--diff-font, 11px);
+  line-height: 1.6;
+}
+
+.diff-file {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #232221;
+}
+
+.diff-file-header {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: #2a2927;
+  font-size: 11.5px;
+}
+
+.diff-collapse {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  place-items: center;
+}
+
+.diff-collapse:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.diff-collapse svg {
+  transition: transform 120ms ease;
+}
+
+.diff-collapse.closed svg {
+  transform: rotate(-90deg);
+}
+
+.diff-file-header > svg {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.diff-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-file-path em {
+  color: var(--text-faint);
+  font-style: normal;
+}
+
+.diff-badge {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.diff-badge.new {
+  background: rgba(127, 163, 125, 0.16);
+  color: #9dbd9b;
+}
+
+.diff-badge.deleted {
+  background: rgba(217, 84, 79, 0.16);
+  color: #e8938f;
+}
+
+.diff-badge.renamed {
+  background: rgba(143, 165, 196, 0.16);
+  color: #a9bfda;
+}
+
+.diff-file-stats {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+  font-size: 10.5px;
+}
+
+.diff-file-stats ins {
+  color: #9dbd9b;
+  text-decoration: none;
+}
+
+.diff-file-stats del {
+  color: #e8938f;
+  text-decoration: none;
+}
+
+.diff-file-body {
+  overflow-x: auto;
+}
+
+.diff-hunk {
+  min-width: max-content;
+}
+
+.diff-view.wrap .diff-hunk {
+  min-width: 0;
+}
+
+.diff-hunk-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  background: rgba(143, 165, 196, 0.07);
+  color: var(--blue);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.diff-hunk + .diff-hunk .diff-hunk-header {
+  border-top: 1px solid var(--border);
+}
+
+.diff-hunk-context {
+  overflow: hidden;
+  color: var(--text-faint);
+  text-overflow: ellipsis;
+}
+
+.diff-line {
+  display: grid;
+  grid-template-columns: 46px 46px 18px minmax(0, 1fr);
+}
+
+.diff-gutter {
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.75;
+  text-align: right;
+  user-select: none;
+}
+
+.diff-marker {
+  text-align: center;
+  user-select: none;
+}
+
+.diff-text {
+  min-width: 0;
+  padding-right: 14px;
   white-space: pre;
+}
+
+.diff-view.wrap .diff-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-line.add {
+  background: rgba(127, 163, 125, 0.13);
+}
+
+.diff-line.add .diff-gutter {
+  background: rgba(127, 163, 125, 0.12);
+  color: #9dbd9b;
+}
+
+.diff-line.add .diff-marker {
+  color: #9dbd9b;
+}
+
+.diff-line.del {
+  background: rgba(217, 84, 79, 0.11);
+}
+
+.diff-line.del .diff-gutter {
+  background: rgba(217, 84, 79, 0.12);
+  color: #e8938f;
+}
+
+.diff-line.del .diff-marker {
+  color: #e8938f;
+}
+
+.diff-split-row {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 46px minmax(0, 1fr);
+}
+
+.diff-split-row .diff-text.side {
+  padding-left: 8px;
+  border-left: 1px solid #2e2d2a;
+}
+
+.diff-text.side.add {
+  background: rgba(127, 163, 125, 0.13);
+}
+
+.diff-text.side.del {
+  background: rgba(217, 84, 79, 0.11);
+}
+
+.diff-text.side.blank {
+  background: #201f1e;
+}
+
+.diff-split-row .diff-gutter.add {
+  background: rgba(127, 163, 125, 0.12);
+  color: #9dbd9b;
+}
+
+.diff-split-row .diff-gutter.del {
+  background: rgba(217, 84, 79, 0.12);
+  color: #e8938f;
+}
+
+.diff-binary {
+  padding: 12px;
+  color: var(--text-faint);
+  font-size: 11px;
 }
 
 .empty-detail,

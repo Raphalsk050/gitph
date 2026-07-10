@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Copy, FileCode2, GitCommitHorizontal, X } from 'lucide-react'
 import type { CommitDetails, RepositorySnapshot } from '@shared/contracts'
+import { DiffView } from './DiffView'
 
 interface DetailsPanelProps {
   snapshot: RepositorySnapshot
@@ -89,7 +90,13 @@ export function DetailsPanel({
               {details.changedFiles.length === 0 && <div className="empty-detail">No changed files in this commit.</div>}
             </div>
           ) : (
-            <pre className="diff-viewer"><code>{details.patchText || 'No patch available for this commit.'}</code></pre>
+            <div className="diff-pane">
+              {details.patchText ? (
+                <DiffView patch={details.patchText} />
+              ) : (
+                <div className="empty-detail">No patch available for this commit.</div>
+              )}
+            </div>
           )}
         </>
       ) : (
