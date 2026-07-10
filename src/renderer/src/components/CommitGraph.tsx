@@ -285,11 +285,14 @@ function buildLaneConnections(rows: readonly GraphRow[]): LaneConnectionGeometry
 }
 
 /**
- * Geometry rules per edge kind:
- * - `merge`: the merged branch attaches sideways right below the merge commit,
- *   then runs down the parent's column.
- * - `parent` changing lane: the ending branch keeps its own column (which the
- *   lane builder reserves as a tail) and curves into the parent at its row.
+ * Geometry rules per edge kind. Every bend happens AT the row of the commit it
+ * belongs to, so a turning line always has its node right beside the turn:
+ * - `merge`: the line leaves the merge commit horizontally at its row, rounds a
+ *   corner and runs down the merged branch's column (drawn in that branch's
+ *   color).
+ * - `parent` changing lane: the ending branch runs down its own column (which
+ *   the lane builder reserves as a tail) and enters the parent horizontally at
+ *   the parent's row, keeping the branch's color.
  * - Parent beyond the loaded window (`targetIndex === null`): the line follows
  *   its column to the bottom of the graph and fades out, signalling that
  *   history continues past the commit limit.
@@ -310,21 +313,20 @@ function buildLaneConnection(
   const stops: LaneGradientStop[] = []
   let path: string
   let targetY: number
+  let strokeColor = targetColor
 
   if (targetIndex === null) {
     targetY = bottomY
+    const fadeStartY = Math.max(sourceY, bottomY - FADE_OUT_ROWS * LANE_ROW_HEIGHT)
     if (changesLane && edge.kind === 'merge') {
-      const { path: curvePath, curveEndY } = curveFromSource(sourceX, sourceY, targetX, targetY)
-      const fadeStartY = Math.max(curveEndY, bottomY - FADE_OUT_ROWS * LANE_ROW_HEIGHT)
-      path = curvePath
+      path = elbowFromSource(sourceX, sourceY, targetX, targetY)
       stops.push(
-        { offset: 0, opacity: 1, color: sourceColor },
-        { offset: verticalOffset(curveEndY, sourceY, targetY), opacity: 1, color: targetColor },
+        { offset: 0, opacity: 1, color: targetColor },
         { offset: verticalOffset(fadeStartY, sourceY, targetY), opacity: 1, color: targetColor },
         { offset: 1, opacity: 0, color: targetColor }
       )
     } else {
-      const fadeStartY = Math.max(sourceY, bottomY - FADE_OUT_ROWS * LANE_ROW_HEIGHT)
+      strokeColor = sourceColor
       path = `M ${sourceX} ${sourceY} L ${sourceX} ${targetY}`
       stops.push(
         { offset: 0, opacity: 1, color: sourceColor },
@@ -337,21 +339,10 @@ function buildLaneConnection(
     if (!changesLane) {
       path = `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`
     } else if (edge.kind === 'merge') {
-      const { path: curvePath, curveEndY } = curveFromSource(sourceX, sourceY, targetX, targetY)
-      path = curvePath
-      stops.push(
-        { offset: 0, opacity: 1, color: sourceColor },
-        { offset: verticalOffset(curveEndY, sourceY, targetY), opacity: 1, color: targetColor },
-        { offset: 1, opacity: 1, color: targetColor }
-      )
+      path = elbowFromSource(sourceX, sourceY, targetX, targetY)
     } else {
-      const { path: curvePath, curveStartY } = curveIntoTarget(sourceX, sourceY, targetX, targetY)
-      path = curvePath
-      stops.push(
-        { offset: 0, opacity: 1, color: sourceColor },
-        { offset: verticalOffset(curveStartY, sourceY, targetY), opacity: 1, color: sourceColor },
-        { offset: 1, opacity: 1, color: targetColor }
-      )
+      strokeColor = sourceColor
+      path = elbowIntoTarget(sourceX, sourceY, targetX, targetY)
     }
   }
 
@@ -363,33 +354,32 @@ function buildLaneConnection(
     path,
     sourceY,
     targetY,
-    strokeColor: targetColor,
+    strokeColor,
     strokeWidth: edge.kind === 'merge' ? 2.5 : 2.25,
     stops
   }
 }
 
+const ELBOW_RADIUS = 24
+
 /**
- * S-curve leaving the source commit sideways, spanning up to a full row so
- * lane changes read as gentle diagonals instead of sharp elbows.
+ * Leaves the source commit horizontally at its own row, rounds one corner and
+ * drops down the target column. The bend sits beside the source node.
  */
-function curveFromSource(sx: number, sy: number, tx: number, ty: number): { path: string; curveEndY: number } {
-  const curveEndY = Math.min(sy + LANE_ROW_HEIGHT, ty)
-  const midY = (sy + curveEndY) / 2
-  return {
-    curveEndY,
-    path: `M ${sx} ${sy} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${curveEndY} L ${tx} ${ty}`
-  }
+function elbowFromSource(sx: number, sy: number, tx: number, ty: number): string {
+  const direction = tx > sx ? 1 : -1
+  const radius = Math.min(ELBOW_RADIUS, Math.abs(tx - sx), ty - sy)
+  return `M ${sx} ${sy} L ${tx - direction * radius} ${sy} Q ${tx} ${sy}, ${tx} ${sy + radius} L ${tx} ${ty}`
 }
 
-/** Mirror of curveFromSource: the line arrives sideways at the target commit. */
-function curveIntoTarget(sx: number, sy: number, tx: number, ty: number): { path: string; curveStartY: number } {
-  const curveStartY = Math.max(ty - LANE_ROW_HEIGHT, sy)
-  const midY = (curveStartY + ty) / 2
-  return {
-    curveStartY,
-    path: `M ${sx} ${sy} L ${sx} ${curveStartY} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`
-  }
+/**
+ * Runs down the source column and enters the target commit horizontally at the
+ * target's row. The bend sits beside the target node.
+ */
+function elbowIntoTarget(sx: number, sy: number, tx: number, ty: number): string {
+  const direction = tx > sx ? 1 : -1
+  const radius = Math.min(ELBOW_RADIUS, Math.abs(tx - sx), ty - sy)
+  return `M ${sx} ${sy} L ${sx} ${ty - radius} Q ${sx} ${ty}, ${sx + direction * radius} ${ty} L ${tx} ${ty}`
 }
 
 function verticalOffset(y: number, sourceY: number, targetY: number): number {
