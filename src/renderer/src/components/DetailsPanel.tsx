@@ -44,7 +44,7 @@ export function DetailsPanel({
       {loading ? (
         <DetailsSkeleton />
       ) : details ? (
-        <>
+        <div className="detail-content" key={details.summary.oid}>
           <div className="detail-header">
             <span className="detail-eyebrow"><GitCommitHorizontal size={14} /> Commit details</span>
             <h2>{details.summary.subject || '(no subject)'}</h2>
@@ -107,7 +107,7 @@ export function DetailsPanel({
               )}
             </div>
           )}
-        </>
+        </div>
       ) : (
         <div className="repository-overview">
           <GitCommitHorizontal size={34} />
