@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy, FileCode2, GitCommitHorizontal, X } from 'lucide-react'
+import { Check, Copy, ExternalLink, FileCode2, GitCommitHorizontal, X } from 'lucide-react'
 import type { CommitDetails, RepositorySnapshot } from '@shared/contracts'
+import { DiffView } from './DiffView'
 
 interface DetailsPanelProps {
   snapshot: RepositorySnapshot
@@ -73,6 +74,15 @@ export function DetailsPanel({
             <button type="button" role="tab" aria-selected={tab === 'diff'} className={tab === 'diff' ? 'active' : ''} onClick={() => setTab('diff')}>
               Patch
             </button>
+            <button
+              type="button"
+              className="icon-button diff-pop-out"
+              aria-label="Open patch in a new window"
+              title="Open patch in a new window"
+              onClick={() => void window.gitph.openDiffWindow(details.summary.oid)}
+            >
+              <ExternalLink size={14} />
+            </button>
           </div>
           {tab === 'files' ? (
             <div className="changed-files">
@@ -89,7 +99,13 @@ export function DetailsPanel({
               {details.changedFiles.length === 0 && <div className="empty-detail">No changed files in this commit.</div>}
             </div>
           ) : (
-            <pre className="diff-viewer"><code>{details.patchText || 'No patch available for this commit.'}</code></pre>
+            <div className="diff-pane">
+              {details.patchText ? (
+                <DiffView patch={details.patchText} />
+              ) : (
+                <div className="empty-detail">No patch available for this commit.</div>
+              )}
+            </div>
           )}
         </>
       ) : (

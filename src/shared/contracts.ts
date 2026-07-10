@@ -163,6 +163,7 @@ export interface GitphApi {
   listActions(refName?: string, oid?: string): Promise<IpcResult<ActionDescriptor[]>>
   executeAction(request: ActionRequest): Promise<IpcResult<ActionExecutionResult>>
   copyText(text: string): Promise<IpcResult<void>>
+  openDiffWindow(oid: string): Promise<IpcResult<void>>
   isWindowMaximized(): Promise<IpcResult<boolean>>
   minimizeWindow(): void
   toggleMaximizeWindow(): void
@@ -178,6 +179,7 @@ export const IPC_CHANNELS = {
   listActions: 'workspace:list-actions',
   executeAction: 'workspace:execute-action',
   copyText: 'system:copy-text',
+  openDiffWindow: 'window:open-diff',
   windowIsMaximized: 'window:is-maximized',
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
