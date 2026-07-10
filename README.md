@@ -4,6 +4,38 @@ Gitph is an Electron desktop client for inspecting and operating on local Git re
 
 Mutating operations are available from commit and ref context menus. The main process rebuilds each command from an allowlist before invoking Git; the renderer never supplies raw command arguments.
 
+## Screenshots
+
+### Repository overview
+
+![Gitph repository overview with refs, commit graph, and commit details](assets/MainPage.png)
+
+*The main workspace keeps repository refs, commit lanes, and the selected commit's metadata and changed files in one view.*
+
+### Patch in the main workspace
+
+![Gitph main workspace with a commit patch open](assets/MainPageWithDiff.png)
+
+*The Patch tab displays a selected commit's diff without leaving the repository graph.*
+
+### Inline diff
+
+![Gitph dedicated diff window in inline mode](assets/DiffScreen.png)
+
+*The dedicated diff window provides file and hunk navigation, line numbers, display controls, and patch copying.*
+
+### Split diff
+
+![Gitph dedicated diff window in split mode](assets/DiffScreenSplitted.png)
+
+*Split mode aligns the old and new sides of each hunk for direct comparison.*
+
+### Multi-file patch
+
+![Gitph split diff showing a multi-file commit](assets/AnotherDiffScreen.png)
+
+*The file sidebar lists every changed file with its status and line totals while the selected patch remains visible.*
+
 ## Requirements
 
 - Node.js 22.12 or newer
