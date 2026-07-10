@@ -356,6 +356,7 @@ body.panel-resizing * {
   color: var(--text-muted);
   cursor: pointer;
   place-items: center;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .icon-button:hover:not(:disabled) {
@@ -536,6 +537,7 @@ input::placeholder {
   font-size: 12.5px;
   text-align: left;
   cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .ref-item:hover {
@@ -750,6 +752,7 @@ input::placeholder {
   position: relative;
   gap: 12px;
   width: 100%;
+  transition: background 120ms ease;
   /* Row height must equal LANE_ROW_HEIGHT in CommitGraph.tsx exactly: the
      lane-connections overlay positions curves as rowIndex * 48, so any extra
      pixel (e.g. a border) accumulates and detaches lines from their nodes. */
@@ -929,6 +932,14 @@ input::placeholder {
   background: var(--bg-soft);
   color: var(--text-muted);
   place-items: center;
+}
+
+.detail-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  animation: content-in 180ms ease-out;
 }
 
 .detail-header {
@@ -1544,6 +1555,7 @@ input::placeholder {
   font-size: 11.5px;
   text-align: left;
   cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .diff-file-item:hover {
@@ -1791,7 +1803,12 @@ input::placeholder {
 }
 
 .orbit-one { inset: -24px; }
-.orbit-two { inset: -48px; border-style: dashed; }
+
+.orbit-two {
+  inset: -48px;
+  border-style: dashed;
+  animation: orbit-spin 60s linear infinite;
+}
 
 .empty-kicker {
   color: var(--accent);
@@ -1843,6 +1860,8 @@ input::placeholder {
 .context-menu {
   position: fixed;
   z-index: 100;
+  transform-origin: top left;
+  animation: menu-in 140ms ease-out;
   width: 272px;
   max-height: min(480px, calc(100vh - 60px));
   padding: 6px;
@@ -1875,6 +1894,7 @@ input::placeholder {
   color: #d5d1c7;
   text-align: left;
   cursor: pointer;
+  transition: background 120ms ease;
 }
 
 .context-menu button:hover:not(:disabled) {
@@ -1909,6 +1929,11 @@ input::placeholder {
   background: rgba(15, 14, 13, 0.7);
   backdrop-filter: blur(8px);
   place-items: center;
+  animation: backdrop-in 150ms ease-out;
+}
+
+.modal-backdrop > * {
+  animation: dialog-in 180ms ease-out;
 }
 
 .confirm-dialog {
@@ -2034,6 +2059,7 @@ input::placeholder {
 .error-toast {
   position: fixed;
   z-index: 120;
+  animation: toast-in 220ms ease-out;
   right: 14px;
   bottom: 38px;
   display: grid;
@@ -2083,6 +2109,42 @@ input::placeholder {
 }
 
 @keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes content-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+
+@keyframes orbit-spin {
   to { transform: rotate(360deg); }
 }
 
