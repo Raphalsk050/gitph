@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FolderOpen, RefreshCw } from 'lucide-react'
 import type { ActionDescriptor, GitRef, GraphRow } from '@shared/contracts'
 import { ActivityRail, pathName } from './components/ActivityRail'
@@ -22,8 +22,67 @@ interface PendingAction {
   name?: string
 }
 
+const RAIL_WIDTH = 68
+const PANEL_LIMITS = {
+  sidebar: { min: 200, max: 420, fallback: 264 },
+  details: { min: 320, max: 640, fallback: 410 }
+} as const
+
+type PanelKind = keyof typeof PANEL_LIMITS
+
+function readPanelWidth(panel: PanelKind): number {
+  const limits = PANEL_LIMITS[panel]
+  const stored = Number(window.localStorage.getItem(`gitph:panel:${panel}`))
+  if (!Number.isFinite(stored) || stored === 0) return limits.fallback
+  return Math.min(limits.max, Math.max(limits.min, stored))
+}
+
+/** Drag state and persistence for the two vertical panel splitters. */
+function usePanelWidths(): {
+  sidebarWidth: number
+  detailsWidth: number
+  startResize(panel: PanelKind, event: React.PointerEvent<HTMLDivElement>): void
+} {
+  const [widths, setWidths] = useState(() => ({
+    sidebar: readPanelWidth('sidebar'),
+    details: readPanelWidth('details')
+  }))
+
+  const startResize = useCallback((panel: PanelKind, event: React.PointerEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    const limits = PANEL_LIMITS[panel]
+    // Pointer capture keeps the drag alive even when the cursor leaves the
+    // window, so a release outside cannot strand the resize state.
+    const splitter = event.currentTarget
+    splitter.setPointerCapture(event.pointerId)
+    document.body.classList.add('panel-resizing')
+
+    const onMove = (move: PointerEvent): void => {
+      const raw = panel === 'sidebar' ? move.clientX - RAIL_WIDTH : window.innerWidth - move.clientX
+      const width = Math.min(limits.max, Math.max(limits.min, raw))
+      setWidths((current) => (current[panel] === width ? current : { ...current, [panel]: width }))
+    }
+    const finish = (): void => {
+      document.body.classList.remove('panel-resizing')
+      splitter.removeEventListener('pointermove', onMove)
+      splitter.removeEventListener('pointerup', finish)
+      splitter.removeEventListener('pointercancel', finish)
+      setWidths((current) => {
+        window.localStorage.setItem(`gitph:panel:${panel}`, String(current[panel]))
+        return current
+      })
+    }
+    splitter.addEventListener('pointermove', onMove)
+    splitter.addEventListener('pointerup', finish)
+    splitter.addEventListener('pointercancel', finish)
+  }, [])
+
+  return { sidebarWidth: widths.sidebar, detailsWidth: widths.details, startResize }
+}
+
 export function App(): React.JSX.Element {
   const workspace = useWorkspace()
+  const { sidebarWidth, detailsWidth, startResize } = usePanelWidths()
   const [selectedRefName, setSelectedRefName] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(true)
@@ -133,7 +192,10 @@ export function App(): React.JSX.Element {
   return (
     <div className="app-shell">
       <TitleBar repositoryName={repositoryName} />
-      <div className="app-body">
+      <div
+        className="app-body"
+        style={{ '--sidebar-w': `${sidebarWidth}px`, '--details-w': `${detailsWidth}px` } as React.CSSProperties}
+      >
         <ActivityRail
           currentRepository={currentRepository}
           recentRepositories={workspace.recentRepositories}
@@ -149,6 +211,13 @@ export function App(): React.JSX.Element {
               onSelect={selectRef}
               onContextMenu={(event, ref) => void openRefMenu(event, ref)}
             />
+            <div
+              className="panel-splitter splitter-sidebar"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize branches panel"
+              onPointerDown={(event) => startResize('sidebar', event)}
+            />
             <CommitGraph
               snapshot={workspace.snapshot}
               selectedOid={workspace.selectedOid}
@@ -161,6 +230,13 @@ export function App(): React.JSX.Element {
               onRefresh={() => void workspace.refresh()}
               onFetch={() => void requestFetch()}
               onToggleSidebar={() => setSidebarOpen((open) => !open)}
+            />
+            <div
+              className="panel-splitter splitter-details"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize details panel"
+              onPointerDown={(event) => startResize('details', event)}
             />
             <DetailsPanel
               snapshot={workspace.snapshot}
