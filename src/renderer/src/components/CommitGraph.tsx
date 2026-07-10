@@ -57,6 +57,8 @@ export function CommitGraph({
     )
   }, [normalizedQuery, snapshot.graph.rows])
   const laneCount = Math.max(1, snapshot.graph.maxLanes)
+  const headOid = snapshot.identity.headOid
+  const detached = headOid !== null && snapshot.identity.headRef === null
 
   return (
     <main className="commit-workspace">
@@ -67,7 +69,7 @@ export function CommitGraph({
         <div className="toolbar-title">
           <GitBranch size={17} />
           <div>
-            <strong>{snapshot.status.branchName ?? 'All branches'}</strong>
+            <strong>{snapshot.status.branchName ?? (detached ? 'Detached HEAD' : 'All branches')}</strong>
             <span>{snapshot.graph.rows.length} commits</span>
           </div>
         </div>
@@ -105,6 +107,8 @@ export function CommitGraph({
               row={row}
               laneCount={laneCount}
               selected={selectedOid === row.commit.oid}
+              isHead={row.commit.oid === headOid}
+              detached={detached}
               onSelect={onSelect}
               onContextMenu={onContextMenu}
               key={row.commit.oid}
@@ -127,6 +131,8 @@ interface CommitRowProps {
   row: GraphRow
   laneCount: number
   selected: boolean
+  isHead: boolean
+  detached: boolean
   onSelect(oid: string): void
   onContextMenu(event: React.MouseEvent, row: GraphRow): void
 }
@@ -135,6 +141,8 @@ const CommitRow = memo(function CommitRow({
   row,
   laneCount,
   selected,
+  isHead,
+  detached,
   onSelect,
   onContextMenu
 }: CommitRowProps): React.JSX.Element {
@@ -143,6 +151,9 @@ const CommitRow = memo(function CommitRow({
     if (selected) element.current?.scrollIntoView({ block: 'nearest' })
   }, [selected])
 
+  // The checked-out branch chip leads the row; a detached checkout has no
+  // branch ref, so it gets a synthetic HEAD chip instead.
+  const refs = [...row.refs].sort((a, b) => Number(b.isHead) - Number(a.isHead))
   return (
     <button
       ref={element}
@@ -158,14 +169,18 @@ const CommitRow = memo(function CommitRow({
           row={row}
           laneCount={laneCount}
           selected={selected}
+          isHead={isHead}
         />
         <div className="commit-copy">
           <div className="commit-subject-line">
             <span className="commit-subject">{row.commit.subject || '(no subject)'}</span>
-            {row.refs.slice(0, 2).map((ref) => (
-              <span className={`commit-ref ${ref.kind}`} key={ref.fullName}>{ref.shortName}</span>
+            {detached && isHead && <span className="commit-ref detached">HEAD</span>}
+            {refs.slice(0, 2).map((ref) => (
+              <span className={`commit-ref ${ref.kind}${ref.isHead ? ' head' : ''}`} key={ref.fullName}>
+                {ref.shortName}
+              </span>
             ))}
-            {row.refs.length > 2 && <span className="commit-ref more">+{row.refs.length - 2}</span>}
+            {refs.length > 2 && <span className="commit-ref more">+{refs.length - 2}</span>}
           </div>
           <span className="commit-oid">{row.commit.shortOid}</span>
         </div>
@@ -228,10 +243,11 @@ function LaneConnections({ rows, laneCount }: { rows: readonly GraphRow[]; laneC
   )
 }
 
-function LaneGraph({ row, laneCount, selected }: {
+function LaneGraph({ row, laneCount, selected, isHead }: {
   row: GraphRow
   laneCount: number
   selected: boolean
+  isHead: boolean
 }): React.JSX.Element {
   const width = laneCount * LANE_SPACING
   const nodeX = row.lane * LANE_SPACING + LANE_SPACING / 2
@@ -245,14 +261,22 @@ function LaneGraph({ row, laneCount, selected }: {
       aria-hidden="true"
     >
       {selected && <circle cx={nodeX} cy={LANE_NODE_Y} r="8.5" fill="none" stroke={nodeColor} strokeOpacity="0.45" strokeWidth="3" />}
-      <circle
-        cx={nodeX}
-        cy={LANE_NODE_Y}
-        r={row.refs.length > 0 || row.commit.parents.length > 1 ? 5.2 : 4.4}
-        fill={nodeColor}
-        stroke="#262624"
-        strokeWidth="1.4"
-      />
+      {isHead ? (
+        <>
+          {/* HEAD reads as a ring: hollow center marks "you are here". */}
+          <circle cx={nodeX} cy={LANE_NODE_Y} r="6.4" fill="#262624" stroke={nodeColor} strokeWidth="2.2" />
+          <circle cx={nodeX} cy={LANE_NODE_Y} r="2.4" fill={nodeColor} />
+        </>
+      ) : (
+        <circle
+          cx={nodeX}
+          cy={LANE_NODE_Y}
+          r={row.refs.length > 0 || row.commit.parents.length > 1 ? 5.2 : 4.4}
+          fill={nodeColor}
+          stroke="#262624"
+          strokeWidth="1.4"
+        />
+      )}
     </svg>
   )
 }

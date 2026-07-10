@@ -44,7 +44,11 @@ export function RefsSidebar({
     return map
   }, [normalizedQuery, snapshot.refs])
 
-  const branch = snapshot.status.branchName ?? snapshot.identity.headRef ?? 'Detached HEAD'
+  const detached = snapshot.identity.headOid !== null && snapshot.identity.headRef === null
+  const branch =
+    snapshot.status.branchName ??
+    snapshot.identity.headRef ??
+    (detached ? snapshot.identity.headOid!.slice(0, 8) : 'No commits yet')
   return (
     <aside className={`refs-sidebar${open ? ' mobile-open' : ''}`}>
       <div className="repository-heading">
@@ -62,10 +66,10 @@ export function RefsSidebar({
         </button>
       </div>
 
-      <div className="current-branch-card">
-        <div className={`worktree-indicator${snapshot.status.isDirty ? ' dirty' : ''}`} />
+      <div className={`current-branch-card${detached ? ' detached' : ''}`}>
+        <div className={`worktree-indicator${snapshot.status.isDirty ? ' dirty' : detached ? ' detached' : ''}`} />
         <div>
-          <span>Current branch</span>
+          <span>{detached ? 'Detached HEAD' : 'Current branch'}</span>
           <strong>{branch}</strong>
         </div>
         {(snapshot.status.ahead > 0 || snapshot.status.behind > 0) && (

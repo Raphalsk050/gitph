@@ -355,9 +355,14 @@ button:disabled {
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
-.worktree-indicator.dirty {
+.worktree-indicator.dirty,
+.worktree-indicator.detached {
   background: var(--warning);
   box-shadow: 0 0 0 4px rgba(211, 160, 95, 0.13);
+}
+
+.current-branch-card.detached span {
+  color: var(--warning);
 }
 
 .current-branch-card div {
@@ -807,6 +812,18 @@ input::placeholder {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.commit-ref.head {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 650;
+}
+
+.commit-ref.detached {
+  background: var(--warning);
+  color: #2b1f10;
+  font-weight: 650;
 }
 
 .commit-ref.remote_branch {
