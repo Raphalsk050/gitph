@@ -13,7 +13,7 @@ interface CommitGraphProps {
   onToggleSidebar(): void
 }
 
-const LANE_COLORS = ['#16c7ff', '#287cff', '#8035e8', '#d52bbf', '#f01855', '#f26430', '#f0b83f', '#20c997']
+const LANE_COLORS = ['#d97757', '#8fa5c4', '#a48fcc', '#7fa37d', '#cfa45c', '#c77e93', '#6fada4', '#8b87c9']
 const LANE_ROW_HEIGHT = 48
 const LANE_NODE_Y = LANE_ROW_HEIGHT / 2
 const LANE_SPACING = 24
@@ -250,7 +250,7 @@ function LaneGraph({ row, laneCount, selected }: {
         cy={LANE_NODE_Y}
         r={row.refs.length > 0 || row.commit.parents.length > 1 ? 5.2 : 4.4}
         fill={nodeColor}
-        stroke="#0d0f10"
+        stroke="#262624"
         strokeWidth="1.4"
       />
     </svg>
