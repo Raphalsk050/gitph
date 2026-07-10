@@ -16,7 +16,7 @@ interface CommitGraphProps {
 const LANE_COLORS = ['#16c7ff', '#287cff', '#8035e8', '#d52bbf', '#f01855', '#f26430', '#f0b83f', '#20c997']
 const LANE_ROW_HEIGHT = 48
 const LANE_NODE_Y = LANE_ROW_HEIGHT / 2
-const LANE_SPACING = 18
+const LANE_SPACING = 24
 
 interface LaneConnectionGeometry {
   id: string
@@ -244,14 +244,14 @@ function LaneGraph({ row, laneCount, selected }: {
       shapeRendering="geometricPrecision"
       aria-hidden="true"
     >
-      {selected && <circle cx={nodeX} cy={LANE_NODE_Y} r="7" fill="none" stroke={nodeColor} strokeOpacity="0.45" strokeWidth="3" />}
+      {selected && <circle cx={nodeX} cy={LANE_NODE_Y} r="8.5" fill="none" stroke={nodeColor} strokeOpacity="0.45" strokeWidth="3" />}
       <circle
         cx={nodeX}
         cy={LANE_NODE_Y}
-        r={row.refs.length > 0 || row.commit.parents.length > 1 ? 4.4 : 3.7}
+        r={row.refs.length > 0 || row.commit.parents.length > 1 ? 5.2 : 4.4}
         fill={nodeColor}
         stroke="#0d0f10"
-        strokeWidth="1.2"
+        strokeWidth="1.4"
       />
     </svg>
   )
@@ -313,10 +313,10 @@ function buildLaneConnection(
 
   if (targetIndex === null) {
     targetY = bottomY
-    const fadeStartY = Math.max(sourceY + LANE_NODE_Y, bottomY - FADE_OUT_ROWS * LANE_ROW_HEIGHT)
     if (changesLane && edge.kind === 'merge') {
-      const curveEndY = Math.min(sourceY + LANE_NODE_Y, targetY)
-      path = `M ${sourceX} ${sourceY} C ${sourceX} ${sourceY + 11}, ${targetX} ${sourceY + 11}, ${targetX} ${curveEndY} L ${targetX} ${targetY}`
+      const { path: curvePath, curveEndY } = curveFromSource(sourceX, sourceY, targetX, targetY)
+      const fadeStartY = Math.max(curveEndY, bottomY - FADE_OUT_ROWS * LANE_ROW_HEIGHT)
+      path = curvePath
       stops.push(
         { offset: 0, opacity: 1, color: sourceColor },
         { offset: verticalOffset(curveEndY, sourceY, targetY), opacity: 1, color: targetColor },
@@ -324,6 +324,7 @@ function buildLaneConnection(
         { offset: 1, opacity: 0, color: targetColor }
       )
     } else {
+      const fadeStartY = Math.max(sourceY, bottomY - FADE_OUT_ROWS * LANE_ROW_HEIGHT)
       path = `M ${sourceX} ${sourceY} L ${sourceX} ${targetY}`
       stops.push(
         { offset: 0, opacity: 1, color: sourceColor },
@@ -336,16 +337,16 @@ function buildLaneConnection(
     if (!changesLane) {
       path = `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`
     } else if (edge.kind === 'merge') {
-      const curveEndY = Math.min(sourceY + LANE_NODE_Y, targetY)
-      path = `M ${sourceX} ${sourceY} C ${sourceX} ${sourceY + 11}, ${targetX} ${sourceY + 11}, ${targetX} ${curveEndY} L ${targetX} ${targetY}`
+      const { path: curvePath, curveEndY } = curveFromSource(sourceX, sourceY, targetX, targetY)
+      path = curvePath
       stops.push(
         { offset: 0, opacity: 1, color: sourceColor },
         { offset: verticalOffset(curveEndY, sourceY, targetY), opacity: 1, color: targetColor },
         { offset: 1, opacity: 1, color: targetColor }
       )
     } else {
-      const curveStartY = Math.max(targetY - LANE_NODE_Y, sourceY)
-      path = `M ${sourceX} ${sourceY} L ${sourceX} ${curveStartY} C ${sourceX} ${targetY - 11}, ${targetX} ${targetY - 11}, ${targetX} ${targetY}`
+      const { path: curvePath, curveStartY } = curveIntoTarget(sourceX, sourceY, targetX, targetY)
+      path = curvePath
       stops.push(
         { offset: 0, opacity: 1, color: sourceColor },
         { offset: verticalOffset(curveStartY, sourceY, targetY), opacity: 1, color: sourceColor },
@@ -363,8 +364,31 @@ function buildLaneConnection(
     sourceY,
     targetY,
     strokeColor: targetColor,
-    strokeWidth: edge.kind === 'merge' ? 2.25 : 2,
+    strokeWidth: edge.kind === 'merge' ? 2.5 : 2.25,
     stops
+  }
+}
+
+/**
+ * S-curve leaving the source commit sideways, spanning up to a full row so
+ * lane changes read as gentle diagonals instead of sharp elbows.
+ */
+function curveFromSource(sx: number, sy: number, tx: number, ty: number): { path: string; curveEndY: number } {
+  const curveEndY = Math.min(sy + LANE_ROW_HEIGHT, ty)
+  const midY = (sy + curveEndY) / 2
+  return {
+    curveEndY,
+    path: `M ${sx} ${sy} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${curveEndY} L ${tx} ${ty}`
+  }
+}
+
+/** Mirror of curveFromSource: the line arrives sideways at the target commit. */
+function curveIntoTarget(sx: number, sy: number, tx: number, ty: number): { path: string; curveStartY: number } {
+  const curveStartY = Math.max(ty - LANE_ROW_HEIGHT, sy)
+  const midY = (curveStartY + ty) / 2
+  return {
+    curveStartY,
+    path: `M ${sx} ${sy} L ${sx} ${curveStartY} C ${sx} ${midY}, ${tx} ${midY}, ${tx} ${ty}`
   }
 }
 
