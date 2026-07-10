@@ -98,11 +98,29 @@ export interface WorkspacePayload {
   cancelled?: boolean
 }
 
-export type GitActionKind =
-  | 'fetch_all'
-  | 'fetch_remote'
-  | 'switch_branch'
-  | 'track_remote'
+export const GIT_ACTION_KINDS = [
+  'fetch_all',
+  'fetch_remote',
+  'pull_ff',
+  'push_head',
+  'switch_branch',
+  'track_remote',
+  'merge_branch',
+  'rebase_onto_branch',
+  'delete_branch',
+  'checkout_tag',
+  'delete_tag',
+  'checkout_commit',
+  'create_branch',
+  'create_tag',
+  'cherry_pick',
+  'revert_commit',
+  'reset_soft',
+  'reset_mixed',
+  'reset_hard'
+] as const
+
+export type GitActionKind = (typeof GIT_ACTION_KINDS)[number]
 
 export interface ActionDescriptor {
   kind: GitActionKind
@@ -110,6 +128,10 @@ export interface ActionDescriptor {
   target: string
   command: string
   refName?: string
+  oid?: string
+  /** When set, the renderer must collect a ref name before executing. */
+  requiresName?: boolean
+  namePlaceholder?: string
   requiresCleanTree: boolean
   riskLevel: 'normal' | 'high'
 }
@@ -117,6 +139,8 @@ export interface ActionDescriptor {
 export interface ActionRequest {
   kind: GitActionKind
   refName?: string
+  oid?: string
+  name?: string
 }
 
 export interface ActionExecutionResult {
@@ -136,7 +160,7 @@ export interface GitphApi {
   openRepository(path?: string): Promise<IpcResult<WorkspacePayload>>
   refreshRepository(): Promise<IpcResult<WorkspacePayload>>
   getCommitDetails(oid: string): Promise<IpcResult<CommitDetails>>
-  listActions(refName?: string): Promise<IpcResult<ActionDescriptor[]>>
+  listActions(refName?: string, oid?: string): Promise<IpcResult<ActionDescriptor[]>>
   executeAction(request: ActionRequest): Promise<IpcResult<ActionExecutionResult>>
   copyText(text: string): Promise<IpcResult<void>>
   isWindowMaximized(): Promise<IpcResult<boolean>>
