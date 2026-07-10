@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy, FileCode2, GitCommitHorizontal, X } from 'lucide-react'
+import { Check, Copy, ExternalLink, FileCode2, GitCommitHorizontal, X } from 'lucide-react'
 import type { CommitDetails, RepositorySnapshot } from '@shared/contracts'
 import { DiffView } from './DiffView'
 
@@ -73,6 +73,15 @@ export function DetailsPanel({
             </button>
             <button type="button" role="tab" aria-selected={tab === 'diff'} className={tab === 'diff' ? 'active' : ''} onClick={() => setTab('diff')}>
               Patch
+            </button>
+            <button
+              type="button"
+              className="icon-button diff-pop-out"
+              aria-label="Open patch in a new window"
+              title="Open patch in a new window"
+              onClick={() => void window.gitph.openDiffWindow(details.summary.oid)}
+            >
+              <ExternalLink size={14} />
             </button>
           </div>
           {tab === 'files' ? (

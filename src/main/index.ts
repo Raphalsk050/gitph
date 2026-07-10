@@ -10,15 +10,12 @@ import { SettingsStore } from './settings-store'
 
 let mainWindow: BrowserWindow | null = null
 
-function createWindow(): BrowserWindow {
+function createBrowserWindow(options: Electron.BrowserWindowConstructorOptions): BrowserWindow {
   const window = new BrowserWindow({
-    width: 1480,
-    height: 900,
-    minWidth: 900,
-    minHeight: 620,
     frame: false,
     show: false,
-    backgroundColor: '#111315',
+    backgroundColor: '#1f1e1d',
+    ...options,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -27,7 +24,6 @@ function createWindow(): BrowserWindow {
       spellcheck: false
     }
   })
-
   const publishMaximized = (): void => {
     window.webContents.send(IPC_CHANNELS.windowMaximizedChanged, window.isMaximized())
   }
@@ -35,14 +31,27 @@ function createWindow(): BrowserWindow {
   window.on('unmaximize', publishMaximized)
   window.once('ready-to-show', () => window.show())
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  return window
+}
 
+function loadRenderer(window: BrowserWindow, hash?: string): void {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL
   if (rendererUrl) {
-    void window.loadURL(rendererUrl)
+    void window.loadURL(hash ? `${rendererUrl}#${hash}` : rendererUrl)
   } else {
-    void window.loadFile(join(__dirname, '../renderer/index.html'))
+    void window.loadFile(join(__dirname, '../renderer/index.html'), hash ? { hash } : undefined)
   }
+}
+
+function createWindow(): BrowserWindow {
+  const window = createBrowserWindow({ width: 1480, height: 900, minWidth: 900, minHeight: 620 })
+  loadRenderer(window)
   return window
+}
+
+function createDiffWindow(oid: string): void {
+  const window = createBrowserWindow({ width: 1320, height: 880, minWidth: 780, minHeight: 480 })
+  loadRenderer(window, `diff=${oid}`)
 }
 
 function registerIpc(controller: RepositoryController): void {
@@ -65,6 +74,13 @@ function registerIpc(controller: RepositoryController): void {
       const value = requiredString(text, 'clipboard text')
       if (value.length > 1_000_000) throw new Error('Clipboard payload is too large.')
       clipboard.writeText(value)
+    })
+  )
+  ipcMain.handle(IPC_CHANNELS.openDiffWindow, (_event, oid: unknown) =>
+    safely(() => {
+      const value = requiredString(oid, 'commit id')
+      if (!/^[0-9a-f]{4,40}$/iu.test(value)) throw new Error('Invalid commit id.')
+      createDiffWindow(value)
     })
   )
   ipcMain.handle(IPC_CHANNELS.windowIsMaximized, (event) =>
