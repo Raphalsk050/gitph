@@ -5,7 +5,7 @@ import { ActivityRail, pathName } from './components/ActivityRail'
 import { CommitGraph } from './components/CommitGraph'
 import { DetailsPanel } from './components/DetailsPanel'
 import { EmptyState } from './components/EmptyState'
-import { ConfirmDialog, ContextMenu, type ContextMenuItem, ErrorToast } from './components/Overlays'
+import { ConfirmDialog, ContextMenu, type ContextMenuItem, ErrorToast, PromptDialog } from './components/Overlays'
 import { RefsSidebar } from './components/RefsSidebar'
 import { TitleBar } from './components/TitleBar'
 import { useWorkspace } from './hooks/useWorkspace'
@@ -17,13 +17,19 @@ interface MenuState {
   items: ContextMenuItem[]
 }
 
+interface PendingAction {
+  action: ActionDescriptor
+  name?: string
+}
+
 export function App(): React.JSX.Element {
   const workspace = useWorkspace()
   const [selectedRefName, setSelectedRefName] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(true)
   const [menu, setMenu] = useState<MenuState | null>(null)
-  const [confirmation, setConfirmation] = useState<ActionDescriptor | null>(null)
+  const [confirmation, setConfirmation] = useState<PendingAction | null>(null)
+  const [namePrompt, setNamePrompt] = useState<ActionDescriptor | null>(null)
 
   const repositoryName = workspace.snapshot ? pathName(workspace.snapshot.identity.root) : null
   const currentRepository = workspace.snapshot?.identity.root ?? null
@@ -43,6 +49,7 @@ export function App(): React.JSX.Element {
         void workspace.refresh()
       } else if (event.key === 'Escape') {
         setMenu(null)
+        setNamePrompt(null)
         if (!workspace.loading) setConfirmation(null)
       }
     }
@@ -62,16 +69,21 @@ export function App(): React.JSX.Element {
     void workspace.selectCommit(ref.displayOid)
   }
 
+  const actionMenuItem = (action: ActionDescriptor): ContextMenuItem => ({
+    id: `${action.kind}:${action.refName ?? action.oid ?? ''}`,
+    label: action.label,
+    detail: action.command,
+    onSelect: () => {
+      if (action.requiresName) setNamePrompt(action)
+      else setConfirmation({ action })
+    }
+  })
+
   const openRefMenu = async (event: React.MouseEvent, ref?: GitRef): Promise<void> => {
     event.preventDefault()
     if (ref) setSelectedRefName(ref.fullName)
     const actions = await workspace.listActions(ref?.fullName)
-    const items: ContextMenuItem[] = actions.map((action) => ({
-      id: `${action.kind}:${action.refName ?? ''}`,
-      label: action.label,
-      detail: action.command,
-      onSelect: () => setConfirmation(action)
-    }))
+    const items: ContextMenuItem[] = actions.map(actionMenuItem)
     items.push({
       id: 'open-repository',
       label: 'Open repository…',
@@ -86,10 +98,11 @@ export function App(): React.JSX.Element {
     })
   }
 
-  const openCommitMenu = (event: React.MouseEvent, row: GraphRow): void => {
+  const openCommitMenu = async (event: React.MouseEvent, row: GraphRow): Promise<void> => {
     event.preventDefault()
     void workspace.selectCommit(row.commit.oid)
     setDetailsOpen(true)
+    const actions = await workspace.listActions(undefined, row.commit.oid)
     setMenu({
       x: event.clientX,
       y: event.clientY,
@@ -100,19 +113,20 @@ export function App(): React.JSX.Element {
           label: 'Copy commit hash',
           detail: row.commit.shortOid,
           onSelect: () => void workspace.copyText(row.commit.oid)
-        }
+        },
+        ...actions.map(actionMenuItem)
       ]
     })
   }
 
   const requestFetch = async (): Promise<void> => {
     const action = (await workspace.listActions()).find((candidate) => candidate.kind === 'fetch_all')
-    if (action) setConfirmation(action)
+    if (action) setConfirmation({ action })
   }
 
   const confirmAction = async (): Promise<void> => {
     if (!confirmation) return
-    const completed = await workspace.runAction(confirmation)
+    const completed = await workspace.runAction(confirmation.action, confirmation.name)
     if (completed) setConfirmation(null)
   }
 
@@ -143,7 +157,7 @@ export function App(): React.JSX.Element {
                 setDetailsOpen(true)
                 void workspace.selectCommit(oid)
               }}
-              onContextMenu={openCommitMenu}
+              onContextMenu={(event, row) => void openCommitMenu(event, row)}
               onRefresh={() => void workspace.refresh()}
               onFetch={() => void requestFetch()}
               onToggleSidebar={() => setSidebarOpen((open) => !open)}
@@ -169,9 +183,20 @@ export function App(): React.JSX.Element {
         <span className="status-shortcut"><RefreshCw size={12} /> F5 refresh</span>
       </footer>
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+      {namePrompt && (
+        <PromptDialog
+          action={namePrompt}
+          onSubmit={(name) => {
+            setNamePrompt(null)
+            setConfirmation({ action: namePrompt, name })
+          }}
+          onClose={() => setNamePrompt(null)}
+        />
+      )}
       {confirmation && (
         <ConfirmDialog
-          action={confirmation}
+          action={confirmation.action}
+          name={confirmation.name}
           busy={workspace.loading}
           onConfirm={() => void confirmAction()}
           onClose={() => setConfirmation(null)}

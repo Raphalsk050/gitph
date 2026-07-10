@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, clipboard, ipcMain, Menu } from 'electron'
 import type { ActionRequest, IpcResult } from '../shared/contracts'
-import { IPC_CHANNELS } from '../shared/contracts'
+import { GIT_ACTION_KINDS, IPC_CHANNELS } from '../shared/contracts'
 import { GitActionService } from './git/action-service'
 import { GitCommandRunner } from './git/command-runner'
 import { RepositoryService } from './git/repository-service'
@@ -54,8 +54,8 @@ function registerIpc(controller: RepositoryController): void {
   ipcMain.handle(IPC_CHANNELS.commitDetails, (_event, oid: unknown) =>
     safely(() => controller.commitDetails(requiredString(oid, 'commit id')))
   )
-  ipcMain.handle(IPC_CHANNELS.listActions, (_event, refName: unknown) =>
-    safely(() => controller.listActions(optionalString(refName, 'ref name')))
+  ipcMain.handle(IPC_CHANNELS.listActions, (_event, refName: unknown, oid: unknown) =>
+    safely(() => controller.listActions(optionalString(refName, 'ref name'), optionalString(oid, 'commit id')))
   )
   ipcMain.handle(IPC_CHANNELS.executeAction, (_event, request: unknown) =>
     safely(() => controller.executeAction(requiredActionRequest(request)))
@@ -102,12 +102,14 @@ function requiredString(value: unknown, label: string): string {
 function requiredActionRequest(value: unknown): ActionRequest {
   if (typeof value !== 'object' || value === null) throw new Error('Invalid Git action request.')
   const request = value as Partial<ActionRequest>
-  const kinds = new Set(['fetch_all', 'fetch_remote', 'switch_branch', 'track_remote'])
+  const kinds = new Set<string>(GIT_ACTION_KINDS)
   if (typeof request.kind !== 'string' || !kinds.has(request.kind)) {
     throw new Error('Unsupported Git action request.')
   }
-  if (request.refName !== undefined && typeof request.refName !== 'string') {
-    throw new Error('Invalid action ref name.')
+  for (const field of ['refName', 'oid', 'name'] as const) {
+    if (request[field] !== undefined && typeof request[field] !== 'string') {
+      throw new Error(`Invalid action ${field}.`)
+    }
   }
   return request as ActionRequest
 }

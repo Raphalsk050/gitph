@@ -100,8 +100,13 @@ export class RepositoryController {
     return await this.repositories.loadCommitDetails(this.current.snapshot.identity.root, summary)
   }
 
-  listActions(refName?: string): ActionDescriptor[] {
+  listActions(refName?: string, oid?: string): ActionDescriptor[] {
     if (this.current === null) throw new Error('Open a Git repository first.')
+    if (oid !== undefined) {
+      const commit = this.current.commits.get(oid)
+      if (commit === undefined) throw new Error('The commit is not part of the current graph.')
+      return this.actions.listCommitActions(commit)
+    }
     const ref = refName
       ? this.current.snapshot.refs.find((candidate) => candidate.fullName === refName)
       : undefined
@@ -112,7 +117,7 @@ export class RepositoryController {
   async executeAction(request: ActionRequest): Promise<ActionExecutionResult> {
     return await this.enqueue(async () => {
       if (this.current === null) throw new Error('Open a Git repository first.')
-      const plan = this.actions.resolve(request, this.current.snapshot.refs)
+      const plan = this.actions.resolve(request, this.current.snapshot.refs, this.current.commits)
       const result = await this.actions.execute(
         this.current.snapshot.identity.root,
         plan,

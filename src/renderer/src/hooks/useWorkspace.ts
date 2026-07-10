@@ -19,8 +19,8 @@ interface WorkspaceController {
   openRepository(path?: string): Promise<void>
   refresh(): Promise<void>
   selectCommit(oid: string): Promise<void>
-  listActions(refName?: string): Promise<ActionDescriptor[]>
-  runAction(action: ActionDescriptor): Promise<boolean>
+  listActions(refName?: string, oid?: string): Promise<ActionDescriptor[]>
+  runAction(action: ActionDescriptor, name?: string): Promise<boolean>
   copyText(text: string): Promise<boolean>
   clearError(): void
 }
@@ -120,8 +120,8 @@ export function useWorkspace(): WorkspaceController {
     await finishWorkspaceOperation(await window.gitph.refreshRepository(), 'Refresh cancelled')
   }, [finishWorkspaceOperation, snapshot])
 
-  const listActions = useCallback(async (refName?: string): Promise<ActionDescriptor[]> => {
-    const result = await window.gitph.listActions(refName)
+  const listActions = useCallback(async (refName?: string, oid?: string): Promise<ActionDescriptor[]> => {
+    const result = await window.gitph.listActions(refName, oid)
     if (!result.ok) {
       setError(result.error)
       return []
@@ -130,11 +130,16 @@ export function useWorkspace(): WorkspaceController {
   }, [])
 
   const runAction = useCallback(
-    async (action: ActionDescriptor): Promise<boolean> => {
+    async (action: ActionDescriptor, name?: string): Promise<boolean> => {
       setLoading(true)
       setError(null)
       setStatus(`Running ${action.command}…`)
-      const result = await window.gitph.executeAction({ kind: action.kind, refName: action.refName })
+      const result = await window.gitph.executeAction({
+        kind: action.kind,
+        refName: action.refName,
+        oid: action.oid,
+        name
+      })
       setLoading(false)
       if (!result.ok) {
         setError(result.error)
