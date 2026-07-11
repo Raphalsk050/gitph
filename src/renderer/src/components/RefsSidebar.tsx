@@ -67,12 +67,16 @@ export function RefsSidebar({
       </div>
 
       <div className={`current-branch-card${detached ? ' detached' : ''}`}>
+        <span className="branch-chip"><GitBranch size={16} /></span>
         <div>
           <span>{detached ? 'Detached HEAD' : 'Current branch'}</span>
           <strong>{branch}</strong>
         </div>
         {(snapshot.status.ahead > 0 || snapshot.status.behind > 0) && (
-          <small>+{snapshot.status.ahead} −{snapshot.status.behind}</small>
+          <small>
+            <ins>↑{snapshot.status.ahead}</ins>
+            <del>↓{snapshot.status.behind}</del>
+          </small>
         )}
       </div>
 
