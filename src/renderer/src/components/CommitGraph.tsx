@@ -13,7 +13,7 @@ interface CommitGraphProps {
   onToggleSidebar(): void
 }
 
-const LANE_COLORS = ['#f2b84b', '#5aa2e0', '#a586e6', '#5cc08a', '#ec8a6b', '#4fbcc4', '#e087b0', '#8f9ae8']
+const LANE_COLORS = ['#7e8dff', '#63a8ff', '#5bd6a4', '#e6b567', '#e58a9b', '#5bc8d4', '#b99bff', '#8fa0b3']
 const LANE_ROW_HEIGHT = 48
 const LANE_NODE_Y = LANE_ROW_HEIGHT / 2
 const LANE_SPACING = 24
@@ -189,7 +189,10 @@ const CommitRow = memo(function CommitRow({
           <span className="commit-oid">{row.commit.shortOid}</span>
         </div>
       </div>
-      <span className="commit-author" title={row.commit.authorEmail}>{row.commit.author}</span>
+      <span className="commit-author" title={row.commit.authorEmail}>
+        <span className="commit-avatar" data-tone={authorTone(row.commit.author)}>{authorInitials(row.commit.author)}</span>
+        {row.commit.author}
+      </span>
       <span className="commit-time" title={formatFullDate(row.commit.commitTime)}>{relativeTime(row.commit.commitTime)}</span>
     </button>
   )
@@ -287,6 +290,19 @@ function LaneGraph({ row, laneCount, selected, isHead }: {
 
 function laneColor(lane: number): string {
   return LANE_COLORS[lane % LANE_COLORS.length]
+}
+
+function authorInitials(name: string): string {
+  const parts = name.trim().split(/\s+/u).filter(Boolean)
+  if (parts.length === 0) return '?'
+  return `${parts[0][0]}${parts.length > 1 ? parts.at(-1)?.[0] ?? '' : ''}`.toUpperCase()
+}
+
+// Stable tone per author (0..4) so an author keeps the same avatar colour.
+function authorTone(name: string): number {
+  let hash = 0
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return hash % 5
 }
 
 const FADE_OUT_ROWS = 3
