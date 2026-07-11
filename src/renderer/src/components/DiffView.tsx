@@ -108,7 +108,7 @@ function InlineHunk({ hunk }: { hunk: DiffHunk }): React.JSX.Element {
 function SplitHunk({ hunk }: { hunk: DiffHunk }): React.JSX.Element {
   const rows = useMemo(() => buildSplitRows(hunk), [hunk])
   return (
-    <div className="diff-hunk">
+    <div className="diff-hunk split">
       <HunkHeader hunk={hunk} />
       {rows.map((row, index) => (
         <div className="diff-split-row" key={index}>
