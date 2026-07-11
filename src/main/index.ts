@@ -14,7 +14,7 @@ function createBrowserWindow(options: Electron.BrowserWindowConstructorOptions):
   const window = new BrowserWindow({
     frame: false,
     show: false,
-    backgroundColor: '#17191e',
+    backgroundColor: '#0a0c11',
     ...options,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
