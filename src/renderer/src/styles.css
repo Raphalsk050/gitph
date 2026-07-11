@@ -9,50 +9,50 @@
   --font-display: "IBM Plex Sans", "Segoe UI", ui-sans-serif, sans-serif;
   --font-mono: "IBM Plex Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
 
-  /* Deep Navy + Amber palette with explicit surface responsibilities. */
-  --bg-app: #070b12;
-  --bg-deep: #090c13;
-  --bg-sidebar: #0d1420;
-  --bg-base: #101520;
-  --bg-raised: #171d2a;
-  --bg-soft: #171d2a;
-  --bg-hover: #202838;
-  --bg-selected: #293348;
-  --bg-overlay: #171d2a;
-  --bg-code: #090c13;
-  --border-subtle: #253044;
-  --border: #303a4b;
-  --border-bright: #303a4b;
+  /* Deep Graphite + Iris palette with explicit surface responsibilities. */
+  --bg-app: #0a0c11;
+  --bg-deep: #0d1016;
+  --bg-sidebar: #0d1016;
+  --bg-base: #111319;
+  --bg-raised: #171a21;
+  --bg-soft: #171a21;
+  --bg-hover: #1b1f28;
+  --bg-selected: rgba(126, 141, 255, 0.14);
+  --bg-overlay: #171a21;
+  --bg-code: #0a0c11;
+  --border-subtle: #191d25;
+  --border: #242a34;
+  --border-bright: #323a47;
 
-  --text: #f3f5fa;
-  --text-soft: #b5bdcc;
-  --text-muted: #b5bdcc;
-  --text-faint: #737e91;
+  --text: #eef0f5;
+  --text-soft: #9aa3b4;
+  --text-muted: #9aa3b4;
+  --text-faint: #616a7b;
 
-  --accent: #f2b84b;
-  --accent-strong: #ffb000;
-  --accent-hover: #f7c867;
-  --accent-soft: #382c16;
-  --accent-selected: rgba(242, 184, 75, 0.16);
-  --accent-down: #d99b2b;
-  --on-accent: #070b12;
+  --accent: #7e8dff;
+  --accent-strong: #7e8dff;
+  --accent-hover: #9aa6ff;
+  --accent-soft: rgba(126, 141, 255, 0.14);
+  --accent-selected: rgba(126, 141, 255, 0.14);
+  --accent-down: #6a78e6;
+  --on-accent: #0a0c12;
 
-  /* Functional colors stay distinct from the amber interaction language. */
-  --success: #66d39e;
-  --success-soft: rgba(102, 211, 158, 0.14);
-  --warning: #f2b84b;
-  --warning-soft: rgba(242, 184, 75, 0.14);
-  --danger: #ff6875;
-  --danger-soft: rgba(255, 104, 117, 0.14);
-  --info: #70a8ff;
-  --info-soft: rgba(112, 168, 255, 0.14);
-  --purple: #c28af4;
-  --blue: #70a8ff;
-  --shadow-color: rgba(0, 0, 0, 0.42);
+  /* Functional colors stay distinct from the iris interaction language. */
+  --success: #5bd6a4;
+  --success-soft: rgba(91, 214, 164, 0.13);
+  --warning: #e6b567;
+  --warning-soft: rgba(230, 181, 103, 0.13);
+  --danger: #ff6d82;
+  --danger-soft: rgba(255, 109, 130, 0.13);
+  --info: #63a8ff;
+  --info-soft: rgba(99, 168, 255, 0.13);
+  --purple: #b99bff;
+  --blue: #63a8ff;
+  --shadow-color: rgba(0, 0, 0, 0.5);
 
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
   --radius-pill: 999px;
 }
 
