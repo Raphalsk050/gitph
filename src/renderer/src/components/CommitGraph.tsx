@@ -13,10 +13,13 @@ interface CommitGraphProps {
   onToggleSidebar(): void
 }
 
-const LANE_COLORS = ['#d97757', '#8fa5c4', '#a48fcc', '#7fa37d', '#cfa45c', '#c77e93', '#6fada4', '#8b87c9']
+const LANE_COLORS = ['#f2b84b', '#5aa2e0', '#a586e6', '#5cc08a', '#ec8a6b', '#4fbcc4', '#e087b0', '#8f9ae8']
 const LANE_ROW_HEIGHT = 48
 const LANE_NODE_Y = LANE_ROW_HEIGHT / 2
 const LANE_SPACING = 24
+// Empty column left of lane 0 so the first lane has breathing room from the row
+// edge, the way GitKraken insets its graph.
+const LANE_GUTTER = 14
 
 interface LaneConnectionGeometry {
   id: string
@@ -161,6 +164,7 @@ const CommitRow = memo(function CommitRow({
       role="option"
       aria-selected={selected}
       className={`commit-row${selected ? ' selected' : ''}`}
+      style={{ '--lane-color': laneColor(row.lane) } as React.CSSProperties}
       onClick={() => onSelect(row.commit.oid)}
       onContextMenu={(event) => onContextMenu(event, row)}
     >
@@ -195,7 +199,7 @@ function LaneConnections({ rows, laneCount }: { rows: readonly GraphRow[]; laneC
   const connections = useMemo(() => buildLaneConnections(rows), [rows])
   if (rows.length === 0) return null
 
-  const width = laneCount * LANE_SPACING
+  const width = LANE_GUTTER + laneCount * LANE_SPACING
   const height = rows.length * LANE_ROW_HEIGHT
   return (
     <svg
@@ -249,9 +253,9 @@ function LaneGraph({ row, laneCount, selected, isHead }: {
   selected: boolean
   isHead: boolean
 }): React.JSX.Element {
-  const width = laneCount * LANE_SPACING
-  const nodeX = row.lane * LANE_SPACING + LANE_SPACING / 2
-  const nodeColor = laneColor(row.lane)
+  const width = LANE_GUTTER + laneCount * LANE_SPACING
+  const nodeX = LANE_GUTTER + row.lane * LANE_SPACING + LANE_SPACING / 2
+  const nodeColor = isHead ? 'var(--accent)' : laneColor(row.lane)
   return (
     <svg
       className="lane-graph lane-node-graph"
@@ -260,11 +264,11 @@ function LaneGraph({ row, laneCount, selected, isHead }: {
       shapeRendering="geometricPrecision"
       aria-hidden="true"
     >
-      {selected && <circle cx={nodeX} cy={LANE_NODE_Y} r="8.5" fill="none" stroke={nodeColor} strokeOpacity="0.45" strokeWidth="3" />}
+      {selected && <circle className="selected-node-ring" cx={nodeX} cy={LANE_NODE_Y} r="8.5" fill="none" stroke="var(--accent)" strokeOpacity="0.65" strokeWidth="3" />}
       {isHead ? (
         <>
           {/* HEAD reads as a ring: hollow center marks "you are here". */}
-          <circle cx={nodeX} cy={LANE_NODE_Y} r="6.4" fill="#262624" stroke={nodeColor} strokeWidth="2.2" />
+          <circle cx={nodeX} cy={LANE_NODE_Y} r="6.4" fill="var(--bg-base)" stroke={nodeColor} strokeWidth="2.2" />
           <circle cx={nodeX} cy={LANE_NODE_Y} r="2.4" fill={nodeColor} />
         </>
       ) : (
@@ -273,7 +277,7 @@ function LaneGraph({ row, laneCount, selected, isHead }: {
           cy={LANE_NODE_Y}
           r={row.refs.length > 0 || row.commit.parents.length > 1 ? 5.2 : 4.4}
           fill={nodeColor}
-          stroke="#262624"
+          stroke="var(--bg-base)"
           strokeWidth="1.4"
         />
       )}
@@ -328,8 +332,8 @@ function buildLaneConnection(
   edgeIndex: number,
   bottomY: number
 ): LaneConnectionGeometry {
-  const sourceX = edge.fromLane * LANE_SPACING + LANE_SPACING / 2
-  const targetX = edge.toLane * LANE_SPACING + LANE_SPACING / 2
+  const sourceX = LANE_GUTTER + edge.fromLane * LANE_SPACING + LANE_SPACING / 2
+  const targetX = LANE_GUTTER + edge.toLane * LANE_SPACING + LANE_SPACING / 2
   const sourceY = sourceIndex * LANE_ROW_HEIGHT + LANE_NODE_Y
   const changesLane = edge.fromLane !== edge.toLane
   const sourceColor = laneColor(edge.fromLane)
