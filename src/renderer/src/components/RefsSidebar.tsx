@@ -67,7 +67,6 @@ export function RefsSidebar({
       </div>
 
       <div className={`current-branch-card${detached ? ' detached' : ''}`}>
-        <div className={`worktree-indicator${snapshot.status.isDirty ? ' dirty' : detached ? ' detached' : ''}`} />
         <div>
           <span>{detached ? 'Detached HEAD' : 'Current branch'}</span>
           <strong>{branch}</strong>
