@@ -45,7 +45,6 @@ export interface CommitSummary {
   authorTime: number
   commitTime: number
   subject: string
-  graphPrefix: string
   shortOid: string
 }
 
@@ -54,7 +53,6 @@ export interface GraphEdge {
   toOid: string
   fromLane: number
   toLane: number
-  colorIndex: number
   kind: 'parent' | 'merge'
 }
 
@@ -64,7 +62,6 @@ export interface GraphRow {
   lane: number
   refs: GitRef[]
   edges: GraphEdge[]
-  activeLanes: Array<string | null>
 }
 
 export interface GraphModel {
@@ -106,6 +103,7 @@ export const GIT_ACTION_KINDS = [
   'push_head',
   'push_branch',
   'publish_branch',
+  'set_upstream',
   'switch_branch',
   'track_remote',
   'merge_branch',
@@ -204,6 +202,8 @@ export interface GitphApi {
   toggleMaximizeWindow(): void
   closeWindow(): void
   onWindowMaximized(callback: (maximized: boolean) => void): () => void
+  /** Fires when the open repository changes on disk (commits, refs, working tree). */
+  onWorkspaceChanged(callback: (payload: WorkspacePayload) => void): () => void
 }
 
 export const IPC_CHANNELS = {
@@ -224,6 +224,7 @@ export const IPC_CHANNELS = {
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close',
-  windowMaximizedChanged: 'window:maximized-changed'
+  windowMaximizedChanged: 'window:maximized-changed',
+  workspaceChanged: 'workspace:changed'
 } as const
 

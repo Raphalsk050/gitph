@@ -125,7 +125,6 @@ export function parseCommits(output: string): CommitSummary[] {
     const record = rawRecord.replace(/^\r?\n|\r?\n$/gu, '')
     if (!record) continue
     const separator = record.indexOf('\x1f')
-    const graphPrefix = separator >= 0 ? record.slice(0, separator).trimEnd() : ''
     const payload = separator >= 0 ? record.slice(separator + 1) : record
     const fields = payload.split('\0', 7)
     if (fields.length < 7) continue
@@ -138,7 +137,6 @@ export function parseCommits(output: string): CommitSummary[] {
       authorTime: parseInteger(authorTime),
       commitTime: parseInteger(commitTime),
       subject: subject.trim(),
-      graphPrefix,
       shortOid: oid.slice(0, 8)
     })
   }
