@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy, ExternalLink, FileCode2, GitCommitHorizontal, X } from 'lucide-react'
-import type { CommitDetails, RepositorySnapshot } from '@shared/contracts'
+import { Check, ChevronRight, Copy, ExternalLink, GitCommitHorizontal, List, ListTree, X } from 'lucide-react'
+import type { ChangedFile, CommitDetails, RepositorySnapshot } from '@shared/contracts'
+import { basename, folderOf, groupByFolder, KIND_LABEL, KIND_LETTER, KIND_ORDER, kindFromStatus } from '../file-status'
 import { DiffView } from './DiffView'
 
 interface DetailsPanelProps {
@@ -13,6 +14,7 @@ interface DetailsPanelProps {
 }
 
 type DetailTab = 'files' | 'diff'
+type ViewMode = 'path' | 'tree'
 
 export function DetailsPanel({
   snapshot,
@@ -23,12 +25,32 @@ export function DetailsPanel({
   onClose
 }: DetailsPanelProps): React.JSX.Element {
   const [tab, setTab] = useState<DetailTab>('files')
+  const [view, setView] = useState<ViewMode>('path')
   const [copied, setCopied] = useState(false)
+  // When a file is clicked in the list, jump to the Patch tab and scroll its
+  // diff card into view.
+  const [focusPath, setFocusPath] = useState<string | null>(null)
 
   useEffect(() => {
     setTab('files')
     setCopied(false)
+    setFocusPath(null)
   }, [details?.summary.oid])
+
+  useEffect(() => {
+    if (tab !== 'diff' || focusPath === null) return
+    const frame = window.requestAnimationFrame(() => {
+      const card = document.querySelector(`.detail-content .diff-file[data-diff-file="${CSS.escape(focusPath)}"]`)
+      card?.scrollIntoView({ block: 'start' })
+      setFocusPath(null)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [tab, focusPath])
+
+  const openFile = (file: ChangedFile): void => {
+    setFocusPath(file.path)
+    setTab('diff')
+  }
 
   const copyOid = async (): Promise<void> => {
     if (!details || !(await onCopy(details.summary.oid))) return
@@ -86,17 +108,43 @@ export function DetailsPanel({
           </div>
           {tab === 'files' ? (
             <div className="changed-files">
-              {details.changedFiles.map((file, index) => (
-                <div className="changed-file" key={`${file.path}:${index}`}>
-                  <span className={`file-status status-${file.status[0]?.toLocaleLowerCase()}`}>{file.status}</span>
-                  <FileCode2 size={15} />
-                  <div>
-                    {file.originalPath && <small>{file.originalPath} →</small>}
-                    <span>{file.path}</span>
+              {details.changedFiles.length === 0 ? (
+                <div className="empty-detail">No changed files in this commit.</div>
+              ) : (
+                <>
+                  <div className="changed-summary">
+                    <div className="changed-counts">
+                      {changeCounts(details.changedFiles).map((count) => (
+                        <span className={`changed-count ${count.kind}`} key={count.kind}>
+                          <i className="dot" />{count.total} {KIND_LABEL[count.kind]}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="segmented view-toggle" role="group" aria-label="Group files">
+                      <button type="button" className={view === 'path' ? 'active' : ''} onClick={() => setView('path')} title="Flat list">
+                        <List size={14} /> Path
+                      </button>
+                      <button type="button" className={view === 'tree' ? 'active' : ''} onClick={() => setView('tree')} title="Group by folder">
+                        <ListTree size={14} /> Tree
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-              {details.changedFiles.length === 0 && <div className="empty-detail">No changed files in this commit.</div>}
+                  {view === 'tree' ? (
+                    groupByFolder(details.changedFiles, (file) => file.path).map((group) => (
+                      <div className="change-group" key={group.folder}>
+                        {group.folder && <div className="change-group-folder" title={group.folder}>{group.folder}</div>}
+                        {group.items.map((file, index) => (
+                          <ChangedFileRow file={file} showFolder={false} onOpen={openFile} key={`${file.path}:${index}`} />
+                        ))}
+                      </div>
+                    ))
+                  ) : (
+                    details.changedFiles.map((file, index) => (
+                      <ChangedFileRow file={file} showFolder onOpen={openFile} key={`${file.path}:${index}`} />
+                    ))
+                  )}
+                </>
+              )}
             </div>
           ) : (
             <div className="diff-pane">
@@ -122,6 +170,38 @@ export function DetailsPanel({
       )}
     </aside>
   )
+}
+
+function ChangedFileRow({
+  file,
+  showFolder,
+  onOpen
+}: {
+  file: ChangedFile
+  showFolder: boolean
+  onOpen(file: ChangedFile): void
+}): React.JSX.Element {
+  const kind = kindFromStatus(file.status)
+  const folder = folderOf(file.path)
+  return (
+    <button type="button" className="changed-file" onClick={() => onOpen(file)} title={file.path}>
+      <span className={`file-status kind-${kind}`}>{KIND_LETTER[kind]}</span>
+      <span className="changed-file-name">
+        {file.originalPath && <em>{basename(file.originalPath)} → </em>}
+        {basename(file.path)}
+      </span>
+      {showFolder && folder && <span className="changed-file-folder">{folder}</span>}
+      <ChevronRight className="changed-file-chevron" size={14} />
+    </button>
+  )
+}
+
+/** Counts changed files by kind, in a stable display order, dropping zeros. */
+function changeCounts(files: ChangedFile[]): Array<{ kind: (typeof KIND_ORDER)[number]; total: number }> {
+  return KIND_ORDER.map((kind) => ({
+    kind,
+    total: files.filter((file) => kindFromStatus(file.status) === kind).length
+  })).filter((count) => count.total > 0)
 }
 
 function DetailsSkeleton(): React.JSX.Element {

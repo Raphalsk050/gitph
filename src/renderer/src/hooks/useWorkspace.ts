@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ActionDescriptor,
   CommitDetails,
+  CommitRequest,
   IpcResult,
   RepositorySnapshot,
+  WorkingDiffRequest,
   WorkspacePayload
 } from '@shared/contracts'
 
@@ -21,6 +23,11 @@ interface WorkspaceController {
   selectCommit(oid: string): Promise<void>
   listActions(refName?: string, oid?: string): Promise<ActionDescriptor[]>
   runAction(action: ActionDescriptor, name?: string): Promise<boolean>
+  stageEntries(paths: string[]): Promise<boolean>
+  unstageEntries(paths: string[]): Promise<boolean>
+  discardEntries(paths: string[]): Promise<boolean>
+  commitChanges(request: CommitRequest): Promise<boolean>
+  loadWorkingDiff(request: WorkingDiffRequest): Promise<string | null>
   copyText(text: string): Promise<boolean>
   clearError(): void
 }
@@ -160,6 +167,96 @@ export function useWorkspace(): WorkspaceController {
     [acceptWorkspace, selectCommit]
   )
 
+  // Working-tree mutations keep the current selection: the changes panel stays
+  // put while staging, so only the snapshot (and thus the file list) refreshes.
+  const applyWorkspace = useCallback((workspace: WorkspacePayload): void => {
+    setRecentRepositories(workspace.recentRepositories)
+    setSnapshot(workspace.snapshot)
+    if (workspace.snapshot) {
+      setStatus(
+        `${workspace.snapshot.graph.rows.length} commits · ${workspace.snapshot.status.entries.length} changed files`
+      )
+    }
+  }, [])
+
+  const mutateWorkingTree = useCallback(
+    async (
+      operation: () => Promise<IpcResult<WorkspacePayload>>,
+      pending: string
+    ): Promise<boolean> => {
+      setLoading(true)
+      setError(null)
+      setStatus(pending)
+      const result = await operation()
+      setLoading(false)
+      if (!result.ok) {
+        setError(result.error)
+        setStatus(result.error)
+        return false
+      }
+      applyWorkspace(result.value)
+      return true
+    },
+    [applyWorkspace]
+  )
+
+  const stageEntries = useCallback(
+    (paths: string[]): Promise<boolean> =>
+      mutateWorkingTree(() => window.gitph.stageEntries(paths), 'Staging changes…'),
+    [mutateWorkingTree]
+  )
+
+  const unstageEntries = useCallback(
+    (paths: string[]): Promise<boolean> =>
+      mutateWorkingTree(() => window.gitph.unstageEntries(paths), 'Unstaging changes…'),
+    [mutateWorkingTree]
+  )
+
+  const discardEntries = useCallback(
+    (paths: string[]): Promise<boolean> =>
+      mutateWorkingTree(() => window.gitph.discardEntries(paths), 'Discarding changes…'),
+    [mutateWorkingTree]
+  )
+
+  const commitChanges = useCallback(
+    async (request: CommitRequest): Promise<boolean> => {
+      setLoading(true)
+      setError(null)
+      setStatus('Committing…')
+      const result = await window.gitph.commitChanges(request)
+      setLoading(false)
+      if (!result.ok) {
+        setError(result.error)
+        setStatus(result.error)
+        return false
+      }
+      if (result.value.exitCode !== 0) {
+        const message = result.value.stderr.trim() || result.value.stdout.trim() || 'Commit failed.'
+        setError(message)
+        setStatus(message)
+        return false
+      }
+      if (result.value.workspace) {
+        // Land on the commit we just created rather than the prior selection.
+        acceptWorkspace(result.value.workspace)
+        const head = result.value.workspace.snapshot?.identity.headOid ?? null
+        setStatus('Commit created')
+        if (head !== null) await selectCommit(head)
+      }
+      return true
+    },
+    [acceptWorkspace, selectCommit]
+  )
+
+  const loadWorkingDiff = useCallback(async (request: WorkingDiffRequest): Promise<string | null> => {
+    const result = await window.gitph.getWorkingDiff(request)
+    if (!result.ok) {
+      setError(result.error)
+      return null
+    }
+    return result.value
+  }, [])
+
   const copyText = useCallback(async (text: string): Promise<boolean> => {
     const result = await window.gitph.copyText(text)
     if (!result.ok) {
@@ -204,6 +301,11 @@ export function useWorkspace(): WorkspaceController {
     selectCommit,
     listActions,
     runAction,
+    stageEntries,
+    unstageEntries,
+    discardEntries,
+    commitChanges,
+    loadWorkingDiff,
     copyText,
     clearError
   }

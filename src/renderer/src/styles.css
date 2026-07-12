@@ -837,6 +837,77 @@ input::placeholder {
   height: 48px;
 }
 
+/* The uncommitted-changes ("WIP") row is pinned above the lane content and is
+   deliberately outside the commit-list-content coordinate space. */
+.wip-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+  padding: 0 15px;
+  border: 0;
+  box-shadow: inset 0 -1px var(--border-subtle);
+  background: transparent;
+  color: var(--text-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.wip-row:hover {
+  background: rgba(255, 255, 255, 0.028);
+  color: var(--text);
+}
+
+.wip-row.selected {
+  background: var(--accent-selected);
+  color: var(--text);
+}
+
+.wip-row.selected::before {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 2.5px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+  content: "";
+}
+
+.wip-node {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  /* Sits over the graph's first lane column (LANE_GUTTER = 14px). */
+  margin-left: 3px;
+  border: 1.5px dashed var(--border-bright);
+  border-radius: 50%;
+  color: var(--accent-hover);
+}
+
+.wip-label {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.wip-count {
+  flex: none;
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
 .lane-graph {
   position: relative;
   z-index: 2;
@@ -1196,14 +1267,68 @@ input::placeholder {
   padding: 8px;
 }
 
-.changed-file {
-  display: grid;
-  grid-template-columns: 30px 16px minmax(0, 1fr);
+.changed-summary {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 9px;
-  border-radius: 8px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 6px 9px;
+}
+
+.changed-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.changed-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text-muted);
+  font-size: 11px;
+}
+
+.changed-count .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.changed-count.modified .dot {
+  background: var(--warning);
+}
+
+.changed-count.new .dot {
+  background: var(--success);
+}
+
+.changed-count.deleted .dot {
+  background: var(--danger);
+}
+
+.changed-count.renamed .dot {
+  background: var(--info);
+}
+
+.changed-count.conflicted .dot {
+  background: var(--danger);
+}
+
+.changed-file {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .changed-file:hover {
@@ -1211,23 +1336,38 @@ input::placeholder {
   color: var(--text);
 }
 
-.changed-file > div {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.changed-file span:last-child,
-.changed-file small {
+.changed-file-name {
   overflow: hidden;
-  font-size: 11px;
+  flex-shrink: 0;
+  max-width: 100%;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.changed-file small {
-  margin-bottom: 2px;
+.changed-file-name em {
   color: var(--text-faint);
+  font-style: normal;
+}
+
+.changed-file-folder {
+  overflow: hidden;
+  flex: 1;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.changed-file-chevron {
+  flex: none;
+  color: var(--text-faint);
+  opacity: 0;
+}
+
+.changed-file:hover .changed-file-chevron {
+  opacity: 1;
 }
 
 .file-status {
@@ -1261,6 +1401,407 @@ input::placeholder {
 .status-d {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+/* ---- Working changes panel ------------------------------------------- */
+
+.working-panel {
+  min-height: 0;
+}
+
+.working-content,
+.working-diff {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  animation: content-in 180ms ease-out;
+}
+
+.working-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 15px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.working-header h2 {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.working-header h2 em {
+  color: var(--accent-hover);
+  font-style: normal;
+}
+
+.view-toggle button {
+  padding: 4px 9px;
+  font-size: 11px;
+}
+
+.working-lists {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 0 10px;
+  overflow-y: auto;
+}
+
+.change-section + .change-section {
+  margin-top: 4px;
+}
+
+.change-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 15px 5px;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.change-section-header em {
+  margin-left: 4px;
+  font-style: normal;
+  color: var(--text-muted);
+}
+
+.link-button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.link-button:hover:not(:disabled) {
+  color: var(--accent-hover);
+}
+
+.link-button:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.change-empty {
+  padding: 2px 15px 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.change-group-folder {
+  overflow: hidden;
+  padding: 6px 15px 3px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-file {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 9px;
+}
+
+.change-file:hover {
+  background: var(--bg-hover);
+}
+
+.change-file.active {
+  background: var(--accent-selected);
+}
+
+.change-file-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 7px 4px 7px 15px;
+  border: 0;
+  background: transparent;
+  color: var(--text-soft);
+  text-align: left;
+  cursor: pointer;
+}
+
+.change-file.active .change-file-open,
+.change-file:hover .change-file-open {
+  color: var(--text);
+}
+
+.change-file-name {
+  overflow: hidden;
+  flex-shrink: 0;
+  max-width: 100%;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-file-name em {
+  color: var(--text-faint);
+  font-style: normal;
+}
+
+.change-file-folder {
+  overflow: hidden;
+  flex: 1;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-file-chevron {
+  flex: none;
+  color: var(--text-faint);
+  opacity: 0;
+}
+
+.change-file:hover .change-file-chevron {
+  opacity: 1;
+}
+
+.change-file-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.change-file:hover .change-file-actions,
+.change-file.active .change-file-actions {
+  opacity: 1;
+}
+
+.ghost-action {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.ghost-action:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.ghost-action.danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.ghost-action:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/* Status letter tints — new/modified/deleted/renamed follow the app palette. */
+.file-status.kind-new {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.file-status.kind-modified {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.file-status.kind-deleted {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.file-status.kind-renamed {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.file-status.kind-conflicted {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.working-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 20px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.working-empty strong {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.working-empty span {
+  font-size: 11.5px;
+}
+
+/* Commit composer pinned to the bottom of the panel. */
+.commit-box {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 15px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-deep);
+}
+
+.amend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.amend-toggle input {
+  accent-color: var(--accent);
+}
+
+.commit-summary,
+.commit-description {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-base);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+}
+
+.commit-summary:focus,
+.commit-description:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.commit-description {
+  resize: vertical;
+  min-height: 54px;
+  line-height: 1.5;
+}
+
+.commit-submit {
+  height: 36px;
+}
+
+.primary-button.danger {
+  background: var(--danger);
+  color: white;
+}
+
+.primary-button.danger:hover:not(:disabled) {
+  background: var(--danger);
+  filter: brightness(1.08);
+}
+
+/* Single-file diff view inside the panel. */
+.working-diff-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 15px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.working-diff-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.chip-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.chip-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.chip-button.danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.chip-button:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.working-diff-path {
+  flex: 0 0 auto;
+  overflow: hidden;
+  padding: 8px 15px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .diff-pane {
@@ -1964,7 +2505,17 @@ input::placeholder {
 }
 
 .context-menu-title {
-  padding: 7px 9px 8px;
+  overflow: hidden;
+  padding: 8px 10px 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-menu-section {
+  padding: 9px 10px 4px;
   color: var(--text-faint);
   font-size: 10px;
   font-weight: 600;
@@ -1974,8 +2525,9 @@ input::placeholder {
 
 .context-menu button {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   padding: 8px 9px;
   border: 0;
@@ -1992,12 +2544,40 @@ input::placeholder {
   color: var(--text);
 }
 
-.context-menu button span {
+.context-menu .menu-icon {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.context-menu button:hover:not(:disabled) .menu-icon {
+  color: var(--text-muted);
+}
+
+.context-menu .menu-label {
+  flex: 1;
+  overflow: hidden;
   font-size: 12px;
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-menu .menu-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 9.5px;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .context-menu button small {
+  flex-shrink: 0;
   overflow: hidden;
   color: var(--text-faint);
   font-family: var(--font-mono);
@@ -2008,6 +2588,20 @@ input::placeholder {
 
 .context-menu button:hover small {
   color: var(--text-muted);
+}
+
+.context-menu button.menu-danger,
+.context-menu button.menu-danger .menu-icon {
+  color: var(--danger);
+}
+
+.context-menu button.menu-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.context-menu button.menu-danger:hover:not(:disabled) .menu-icon {
+  color: var(--danger);
 }
 
 .modal-backdrop {

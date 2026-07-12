@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, GitBranch, X } from 'lucide-react'
+import { AlertTriangle, GitBranch, X, type LucideIcon } from 'lucide-react'
 import type { ActionDescriptor } from '@shared/contracts'
 
 export interface ContextMenuItem {
   id: string
   label: string
+  /** Section header this item belongs under; a heading is drawn when it changes. */
+  group?: string
+  /** Leading Lucide glyph shown before the label. */
+  icon?: LucideIcon
+  /** Right-aligned pill, e.g. a risk badge. */
+  badge?: string
+  /** Right-aligned muted text, e.g. a keyboard shortcut. */
   detail?: string
+  /** Renders the row in the destructive palette. */
+  danger?: boolean
   disabled?: boolean
   onSelect(): void
 }
@@ -37,24 +46,35 @@ export function ContextMenu({ x, y, title, items, onClose }: ContextMenuProps): 
 
   const left = Math.max(8, Math.min(x, window.innerWidth - 280))
   const top = Math.max(40, Math.min(y, window.innerHeight - Math.max(120, items.length * 48 + 54)))
+  let lastGroup: string | undefined
   return (
     <div ref={menu} className="context-menu" style={{ left, top }} role="menu">
-      <div className="context-menu-title">{title}</div>
-      {items.map((item) => (
-        <button
-          type="button"
-          role="menuitem"
-          disabled={item.disabled}
-          onClick={() => {
-            item.onSelect()
-            onClose()
-          }}
-          key={item.id}
-        >
-          <span>{item.label}</span>
-          {item.detail && <small>{item.detail}</small>}
-        </button>
-      ))}
+      <div className="context-menu-title" title={title}>{title}</div>
+      {items.map((item) => {
+        const heading = item.group && item.group !== lastGroup ? item.group : null
+        lastGroup = item.group
+        const Icon = item.icon
+        return (
+          <div key={item.id}>
+            {heading && <div className="context-menu-section">{heading}</div>}
+            <button
+              type="button"
+              role="menuitem"
+              className={item.danger ? 'menu-danger' : undefined}
+              disabled={item.disabled}
+              onClick={() => {
+                item.onSelect()
+                onClose()
+              }}
+            >
+              {Icon && <Icon className="menu-icon" size={15} aria-hidden />}
+              <span className="menu-label">{item.label}</span>
+              {item.badge && <em className="menu-badge">{item.badge}</em>}
+              {item.detail && <small>{item.detail}</small>}
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -115,7 +135,7 @@ export function PromptDialog({ action, onSubmit, onClose }: PromptDialogProps): 
         <span className="confirm-icon"><GitBranch size={22} /></span>
         <div>
           <span className="dialog-eyebrow">Name required</span>
-          <h2 id="prompt-title">{action.label.replace('…', '')}</h2>
+          <h2 id="prompt-title">{action.label}</h2>
         </div>
         <form
           onSubmit={(event) => {

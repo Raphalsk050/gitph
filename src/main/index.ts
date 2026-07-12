@@ -1,10 +1,11 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, clipboard, ipcMain, Menu } from 'electron'
-import type { ActionRequest, IpcResult } from '../shared/contracts'
+import type { ActionRequest, CommitRequest, IpcResult, WorkingDiffRequest } from '../shared/contracts'
 import { GIT_ACTION_KINDS, IPC_CHANNELS } from '../shared/contracts'
 import { GitActionService } from './git/action-service'
 import { GitCommandRunner } from './git/command-runner'
 import { RepositoryService } from './git/repository-service'
+import { GitWorkingTreeService } from './git/working-tree-service'
 import { RepositoryController } from './repository-controller'
 import { SettingsStore } from './settings-store'
 
@@ -69,6 +70,21 @@ function registerIpc(controller: RepositoryController): void {
   ipcMain.handle(IPC_CHANNELS.executeAction, (_event, request: unknown) =>
     safely(() => controller.executeAction(requiredActionRequest(request)))
   )
+  ipcMain.handle(IPC_CHANNELS.stageEntries, (_event, paths: unknown) =>
+    safely(() => controller.stageEntries(requiredStringArray(paths, 'file paths')))
+  )
+  ipcMain.handle(IPC_CHANNELS.unstageEntries, (_event, paths: unknown) =>
+    safely(() => controller.unstageEntries(requiredStringArray(paths, 'file paths')))
+  )
+  ipcMain.handle(IPC_CHANNELS.discardEntries, (_event, paths: unknown) =>
+    safely(() => controller.discardEntries(requiredStringArray(paths, 'file paths')))
+  )
+  ipcMain.handle(IPC_CHANNELS.commitChanges, (_event, request: unknown) =>
+    safely(() => controller.commitChanges(requiredCommitRequest(request)))
+  )
+  ipcMain.handle(IPC_CHANNELS.workingDiff, (_event, request: unknown) =>
+    safely(() => controller.workingDiff(requiredWorkingDiffRequest(request)))
+  )
   ipcMain.handle(IPC_CHANNELS.copyText, (_event, text: unknown) =>
     safely(() => {
       const value = requiredString(text, 'clipboard text')
@@ -115,6 +131,42 @@ function requiredString(value: unknown, label: string): string {
   return value
 }
 
+function requiredStringArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error(`Invalid ${label}.`)
+  if (value.length > 5000) throw new Error(`Too many ${label}.`)
+  return value.map((entry) => requiredString(entry, label))
+}
+
+function requiredCommitRequest(value: unknown): CommitRequest {
+  if (typeof value !== 'object' || value === null) throw new Error('Invalid commit request.')
+  const request = value as Partial<CommitRequest>
+  const summary = requiredString(request.summary, 'commit summary')
+  if (request.description !== undefined && typeof request.description !== 'string') {
+    throw new Error('Invalid commit description.')
+  }
+  for (const field of ['amend', 'stageAll'] as const) {
+    if (request[field] !== undefined && typeof request[field] !== 'boolean') {
+      throw new Error(`Invalid commit ${field}.`)
+    }
+  }
+  return {
+    summary,
+    description: request.description,
+    amend: request.amend,
+    stageAll: request.stageAll
+  }
+}
+
+function requiredWorkingDiffRequest(value: unknown): WorkingDiffRequest {
+  if (typeof value !== 'object' || value === null) throw new Error('Invalid diff request.')
+  const request = value as Partial<WorkingDiffRequest>
+  const path = requiredString(request.path, 'file path')
+  if (typeof request.staged !== 'boolean' || typeof request.untracked !== 'boolean') {
+    throw new Error('Invalid diff request flags.')
+  }
+  return { path, staged: request.staged, untracked: request.untracked }
+}
+
 function requiredActionRequest(value: unknown): ActionRequest {
   if (typeof value !== 'object' || value === null) throw new Error('Invalid Git action request.')
   const request = value as Partial<ActionRequest>
@@ -136,6 +188,7 @@ void app.whenReady().then(() => {
   const controller = new RepositoryController(
     new RepositoryService(runner),
     new GitActionService(runner),
+    new GitWorkingTreeService(runner),
     new SettingsStore(join(app.getPath('userData'), 'settings.json')),
     () => mainWindow
   )

@@ -50,7 +50,7 @@ export class RepositoryService {
   async loadSnapshot(path: string): Promise<LoadedRepository> {
     const identity = await this.discover(path)
     const [statusResult, refsResult, commitsResult] = await Promise.all([
-      this.runner.run(['status', '--porcelain=v2', '-z', '--branch', '--untracked-files=normal'], {
+      this.runner.run(['status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all'], {
         repo: identity.root
       }),
       this.runner.run(

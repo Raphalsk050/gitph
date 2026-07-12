@@ -151,6 +151,30 @@ export interface ActionExecutionResult {
   workspace?: WorkspacePayload
 }
 
+/** Request to read the diff of a single working-tree file. */
+export interface WorkingDiffRequest {
+  path: string
+  /** Read the staged (index) diff instead of the worktree diff. */
+  staged: boolean
+  /** Untracked files have no index entry, so they diff against an empty tree. */
+  untracked: boolean
+}
+
+export interface CommitRequest {
+  summary: string
+  description?: string
+  amend?: boolean
+  /** Stage every change before committing (the "commit all" affordance). */
+  stageAll?: boolean
+}
+
+export interface CommitResult {
+  exitCode: number
+  stdout: string
+  stderr: string
+  workspace?: WorkspacePayload
+}
+
 export type IpcResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: string }
@@ -162,6 +186,11 @@ export interface GitphApi {
   getCommitDetails(oid: string): Promise<IpcResult<CommitDetails>>
   listActions(refName?: string, oid?: string): Promise<IpcResult<ActionDescriptor[]>>
   executeAction(request: ActionRequest): Promise<IpcResult<ActionExecutionResult>>
+  stageEntries(paths: string[]): Promise<IpcResult<WorkspacePayload>>
+  unstageEntries(paths: string[]): Promise<IpcResult<WorkspacePayload>>
+  discardEntries(paths: string[]): Promise<IpcResult<WorkspacePayload>>
+  commitChanges(request: CommitRequest): Promise<IpcResult<CommitResult>>
+  getWorkingDiff(request: WorkingDiffRequest): Promise<IpcResult<string>>
   copyText(text: string): Promise<IpcResult<void>>
   openDiffWindow(oid: string): Promise<IpcResult<void>>
   isWindowMaximized(): Promise<IpcResult<boolean>>
@@ -178,6 +207,11 @@ export const IPC_CHANNELS = {
   commitDetails: 'workspace:commit-details',
   listActions: 'workspace:list-actions',
   executeAction: 'workspace:execute-action',
+  stageEntries: 'worktree:stage',
+  unstageEntries: 'worktree:unstage',
+  discardEntries: 'worktree:discard',
+  commitChanges: 'worktree:commit',
+  workingDiff: 'worktree:diff',
   copyText: 'system:copy-text',
   openDiffWindow: 'window:open-diff',
   windowIsMaximized: 'window:is-maximized',

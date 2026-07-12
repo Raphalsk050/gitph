@@ -6,11 +6,15 @@ import type {
   ActionExecutionResult,
   ActionRequest,
   CommitDetails,
+  CommitRequest,
+  CommitResult,
+  WorkingDiffRequest,
   WorkspacePayload
 } from '../shared/contracts'
 import { GitActionService } from './git/action-service'
 import type { LoadedRepository } from './git/repository-service'
 import { RepositoryService } from './git/repository-service'
+import { GitWorkingTreeService } from './git/working-tree-service'
 import { SettingsStore } from './settings-store'
 
 /**
@@ -22,6 +26,7 @@ import { SettingsStore } from './settings-store'
 export class RepositoryController {
   private readonly repositories: RepositoryService
   private readonly actions: GitActionService
+  private readonly workingTree: GitWorkingTreeService
   private readonly settings: SettingsStore
   private readonly getWindow: () => BrowserWindow | null
   private current: LoadedRepository | null = null
@@ -32,11 +37,13 @@ export class RepositoryController {
   constructor(
     repositories: RepositoryService,
     actions: GitActionService,
+    workingTree: GitWorkingTreeService,
     settings: SettingsStore,
     getWindow: () => BrowserWindow | null
   ) {
     this.repositories = repositories
     this.actions = actions
+    this.workingTree = workingTree
     this.settings = settings
     this.getWindow = getWindow
   }
@@ -140,6 +147,115 @@ export class RepositoryController {
         workspace: this.workspace()
       }
     })
+  }
+
+  async stageEntries(paths: string[]): Promise<WorkspacePayload> {
+    return await this.enqueue(async () => {
+      const repo = this.requireCurrent()
+      const verified = this.verifyPaths(repo, paths)
+      this.assertOk(await this.workingTree.stage(repo.snapshot.identity.root, verified))
+      return await this.reloadWorkspace()
+    })
+  }
+
+  async unstageEntries(paths: string[]): Promise<WorkspacePayload> {
+    return await this.enqueue(async () => {
+      const repo = this.requireCurrent()
+      const verified = this.verifyPaths(repo, paths)
+      this.assertOk(await this.workingTree.unstage(repo.snapshot.identity.root, verified))
+      return await this.reloadWorkspace()
+    })
+  }
+
+  async discardEntries(paths: string[]): Promise<WorkspacePayload> {
+    return await this.enqueue(async () => {
+      const repo = this.requireCurrent()
+      const verified = this.verifyPaths(repo, paths)
+      const tracked: string[] = []
+      const untracked: string[] = []
+      for (const path of verified) {
+        const entry = repo.snapshot.status.entries.find((candidate) => candidate.path === path)
+        if (entry && entry.indexStatus === '?' && entry.worktreeStatus === '?') untracked.push(path)
+        else tracked.push(path)
+      }
+      const hasHead = repo.snapshot.identity.headOid !== null
+      this.assertOk(await this.workingTree.discard(repo.snapshot.identity.root, tracked, untracked, hasHead))
+      return await this.reloadWorkspace()
+    })
+  }
+
+  async commitChanges(request: CommitRequest): Promise<CommitResult> {
+    return await this.enqueue(async () => {
+      const repo = this.requireCurrent()
+      const summary = request.summary.trim()
+      if (!summary) throw new Error('A commit summary is required.')
+      const root = repo.snapshot.identity.root
+      if (request.stageAll) {
+        const staged = await this.workingTree.stageAll(root)
+        if (staged.exitCode !== 0) {
+          return { exitCode: staged.exitCode, stdout: staged.stdout, stderr: staged.stderr }
+        }
+      }
+      const result = await this.workingTree.commit(
+        root,
+        summary,
+        request.description?.trim() || undefined,
+        request.amend ?? false
+      )
+      if (result.exitCode !== 0) {
+        return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr }
+      }
+      return {
+        exitCode: 0,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        workspace: await this.reloadWorkspace()
+      }
+    })
+  }
+
+  async workingDiff(request: WorkingDiffRequest): Promise<string> {
+    const repo = this.requireCurrent()
+    this.verifyPaths(repo, [request.path])
+    const result = await this.workingTree.diff(
+      repo.snapshot.identity.root,
+      request.path,
+      request.staged,
+      request.untracked
+    )
+    return result.stdout
+  }
+
+  private requireCurrent(): LoadedRepository {
+    if (this.current === null) throw new Error('Open a Git repository first.')
+    return this.current
+  }
+
+  /** Only paths present in the loaded status snapshot may be operated on. */
+  private verifyPaths(repo: LoadedRepository, paths: string[]): string[] {
+    if (paths.length === 0) throw new Error('No files were provided.')
+    const known = new Set<string>()
+    for (const entry of repo.snapshot.status.entries) {
+      known.add(entry.path)
+      if (entry.originalPath) known.add(entry.originalPath)
+    }
+    const verified = paths.filter((path) => known.has(path))
+    if (verified.length !== paths.length) {
+      throw new Error('Some files are no longer part of the working tree. Refresh and try again.')
+    }
+    return verified
+  }
+
+  private assertOk(result: { exitCode: number; stdout: string; stderr: string }): void {
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.trim() || result.stdout.trim() || 'The Git operation failed.')
+    }
+  }
+
+  private async reloadWorkspace(): Promise<WorkspacePayload> {
+    const repo = this.requireCurrent()
+    this.current = await this.repositories.loadSnapshot(repo.snapshot.identity.root)
+    return this.workspace()
   }
 
   private async openPath(path: string): Promise<void> {

@@ -1,11 +1,15 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { GitBranch, Menu, RefreshCw, Search, Wifi } from 'lucide-react'
+import { FilePen, GitBranch, Menu, RefreshCw, Search, Wifi } from 'lucide-react'
 import type { GraphEdge, GraphRow, RepositorySnapshot } from '@shared/contracts'
 
 interface CommitGraphProps {
   snapshot: RepositorySnapshot
   selectedOid: string | null
   loading: boolean
+  /** Number of uncommitted files; the WIP row only appears when non-zero. */
+  workingChanges: number
+  workingSelected: boolean
+  onSelectWorking(): void
   onSelect(oid: string): void
   onContextMenu(event: React.MouseEvent, row: GraphRow): void
   onRefresh(): void
@@ -42,6 +46,9 @@ export function CommitGraph({
   snapshot,
   selectedOid,
   loading,
+  workingChanges,
+  workingSelected,
+  onSelectWorking,
   onSelect,
   onContextMenu,
   onRefresh,
@@ -101,6 +108,19 @@ export function CommitGraph({
         <span>Committed</span>
       </div>
       <div className="commit-list" role="listbox" aria-label="Commit history">
+        {/* The WIP row sits above the lane coordinate space, so it never shifts
+            the connection overlay that is measured from commit-list-content. */}
+        {workingChanges > 0 && (
+          <button
+            type="button"
+            className={`wip-row${workingSelected ? ' selected' : ''}`}
+            onClick={onSelectWorking}
+          >
+            <span className="wip-node"><FilePen size={13} /></span>
+            <span className="wip-label">Uncommitted changes</span>
+            <span className="wip-count">{workingChanges}</span>
+          </button>
+        )}
         <div className="commit-list-content">
           {/* A filtered list renumbers rows, so lane connections would join
               commits that are not adjacent in history; show nodes only. */}

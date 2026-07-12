@@ -1,6 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FolderOpen, RefreshCw } from 'lucide-react'
-import type { ActionDescriptor, GitRef, GraphRow } from '@shared/contracts'
+import {
+  AlertTriangle,
+  ArrowDownToLine,
+  ArrowRightLeft,
+  ArrowUpFromLine,
+  Cherry,
+  Copy,
+  FolderOpen,
+  GitBranch,
+  GitBranchPlus,
+  GitCommitHorizontal,
+  GitMerge,
+  RefreshCw,
+  RotateCcw,
+  Spline,
+  Tag,
+  Trash2,
+  Undo2,
+  type LucideIcon
+} from 'lucide-react'
+import type { ActionDescriptor, GitActionKind, GitRef, GraphRow } from '@shared/contracts'
 import { ActivityRail, pathName } from './components/ActivityRail'
 import { CommitGraph } from './components/CommitGraph'
 import { DetailsPanel } from './components/DetailsPanel'
@@ -8,6 +27,7 @@ import { EmptyState } from './components/EmptyState'
 import { ConfirmDialog, ContextMenu, type ContextMenuItem, ErrorToast, PromptDialog } from './components/Overlays'
 import { RefsSidebar } from './components/RefsSidebar'
 import { TitleBar } from './components/TitleBar'
+import { WorkingChangesPanel } from './components/WorkingChangesPanel'
 import { useWorkspace } from './hooks/useWorkspace'
 
 interface MenuState {
@@ -20,6 +40,41 @@ interface MenuState {
 interface PendingAction {
   action: ActionDescriptor
   name?: string
+}
+
+/** Lucide glyph per action, so the menu reads by intent rather than by text alone. */
+const ACTION_ICONS: Record<GitActionKind, LucideIcon> = {
+  fetch_all: RefreshCw,
+  fetch_remote: ArrowDownToLine,
+  pull_ff: ArrowDownToLine,
+  push_head: ArrowUpFromLine,
+  switch_branch: ArrowRightLeft,
+  track_remote: GitBranchPlus,
+  merge_branch: GitMerge,
+  rebase_onto_branch: Spline,
+  delete_branch: Trash2,
+  checkout_tag: Tag,
+  delete_tag: Trash2,
+  checkout_commit: GitCommitHorizontal,
+  create_branch: GitBranch,
+  create_tag: Tag,
+  cherry_pick: Cherry,
+  revert_commit: Undo2,
+  reset_soft: RotateCcw,
+  reset_mixed: RotateCcw,
+  reset_hard: AlertTriangle
+}
+
+/** Section header a commit action falls under; other kinds stay ungrouped. */
+const ACTION_GROUPS: Partial<Record<GitActionKind, string>> = {
+  create_branch: 'Create',
+  create_tag: 'Create',
+  checkout_commit: 'Create',
+  cherry_pick: 'Apply',
+  revert_commit: 'Apply',
+  reset_soft: 'Reset branch',
+  reset_mixed: 'Reset branch',
+  reset_hard: 'Reset branch'
 }
 
 const RAIL_WIDTH = 68
@@ -86,6 +141,7 @@ export function App(): React.JSX.Element {
   const [selectedRefName, setSelectedRefName] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(true)
+  const [workingSelected, setWorkingSelected] = useState(false)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [confirmation, setConfirmation] = useState<PendingAction | null>(null)
   const [namePrompt, setNamePrompt] = useState<ActionDescriptor | null>(null)
@@ -125,13 +181,25 @@ export function App(): React.JSX.Element {
     setSelectedRefName(ref.fullName)
     setSidebarOpen(false)
     setDetailsOpen(true)
+    setWorkingSelected(false)
     void workspace.selectCommit(ref.displayOid)
   }
+
+  const selectCommit = (oid: string): void => {
+    setDetailsOpen(true)
+    setWorkingSelected(false)
+    void workspace.selectCommit(oid)
+  }
+
+  const workingChanges = workspace.snapshot?.status.entries.length ?? 0
 
   const actionMenuItem = (action: ActionDescriptor): ContextMenuItem => ({
     id: `${action.kind}:${action.refName ?? action.oid ?? ''}`,
     label: action.label,
-    detail: action.command,
+    group: ACTION_GROUPS[action.kind],
+    icon: ACTION_ICONS[action.kind],
+    badge: action.riskLevel === 'high' ? 'High impact' : undefined,
+    danger: action.kind === 'reset_hard',
     onSelect: () => {
       if (action.requiresName) setNamePrompt(action)
       else setConfirmation({ action })
@@ -146,6 +214,7 @@ export function App(): React.JSX.Element {
     items.push({
       id: 'open-repository',
       label: 'Open repository…',
+      icon: FolderOpen,
       detail: 'Ctrl + O',
       onSelect: () => void workspace.openRepository()
     })
@@ -159,18 +228,19 @@ export function App(): React.JSX.Element {
 
   const openCommitMenu = async (event: React.MouseEvent, row: GraphRow): Promise<void> => {
     event.preventDefault()
+    setWorkingSelected(false)
     void workspace.selectCommit(row.commit.oid)
     setDetailsOpen(true)
     const actions = await workspace.listActions(undefined, row.commit.oid)
     setMenu({
       x: event.clientX,
       y: event.clientY,
-      title: row.commit.shortOid,
+      title: row.commit.subject,
       items: [
         {
           id: 'copy-oid',
           label: 'Copy commit hash',
-          detail: row.commit.shortOid,
+          icon: Copy,
           onSelect: () => void workspace.copyText(row.commit.oid)
         },
         ...actions.map(actionMenuItem)
@@ -222,10 +292,13 @@ export function App(): React.JSX.Element {
               snapshot={workspace.snapshot}
               selectedOid={workspace.selectedOid}
               loading={workspace.loading}
-              onSelect={(oid) => {
+              workingChanges={workingChanges}
+              workingSelected={workingSelected}
+              onSelectWorking={() => {
                 setDetailsOpen(true)
-                void workspace.selectCommit(oid)
+                setWorkingSelected(true)
               }}
+              onSelect={selectCommit}
               onContextMenu={(event, row) => void openCommitMenu(event, row)}
               onRefresh={() => void workspace.refresh()}
               onFetch={() => void requestFetch()}
@@ -238,14 +311,32 @@ export function App(): React.JSX.Element {
               aria-label="Resize details panel"
               onPointerDown={(event) => startResize('details', event)}
             />
-            <DetailsPanel
-              snapshot={workspace.snapshot}
-              details={workspace.details}
-              loading={workspace.loadingDetails}
-              open={detailsOpen}
-              onCopy={workspace.copyText}
-              onClose={() => setDetailsOpen(false)}
-            />
+            {workingSelected ? (
+              <WorkingChangesPanel
+                snapshot={workspace.snapshot}
+                busy={workspace.loading}
+                open={detailsOpen}
+                onStage={workspace.stageEntries}
+                onUnstage={workspace.unstageEntries}
+                onDiscard={workspace.discardEntries}
+                onCommit={async (request) => {
+                  const ok = await workspace.commitChanges(request)
+                  if (ok) setWorkingSelected(false)
+                  return ok
+                }}
+                loadDiff={workspace.loadWorkingDiff}
+                onClose={() => setDetailsOpen(false)}
+              />
+            ) : (
+              <DetailsPanel
+                snapshot={workspace.snapshot}
+                details={workspace.details}
+                loading={workspace.loadingDetails}
+                open={detailsOpen}
+                onCopy={workspace.copyText}
+                onClose={() => setDetailsOpen(false)}
+              />
+            )}
           </>
         ) : (
           <EmptyState loading={workspace.loading} onOpen={() => void workspace.openRepository()} />

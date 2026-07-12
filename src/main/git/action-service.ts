@@ -229,7 +229,7 @@ export class GitActionService {
   private checkoutCommit(commit: CommitSummary): ActionPlan {
     return this.plan(
       'checkout_commit',
-      `Checkout ${commit.shortOid} (detached)`,
+      `Checkout ${quoteSubject(commit)} (detached)`,
       commit.shortOid,
       ['switch', '--detach', commit.oid],
       { oid: commit.oid, requiresCleanTree: true }
@@ -239,7 +239,7 @@ export class GitActionService {
   private createBranch(commit: CommitSummary, name?: string): ActionPlan {
     return this.plan(
       'create_branch',
-      `Create branch at ${commit.shortOid}…`,
+      `Create branch at ${quoteSubject(commit)}`,
       commit.shortOid,
       ['branch', '--', name ?? NAME_TOKEN, commit.oid],
       { oid: commit.oid, requiresName: true, namePlaceholder: 'branch name' }
@@ -249,7 +249,7 @@ export class GitActionService {
   private createTag(commit: CommitSummary, name?: string): ActionPlan {
     return this.plan(
       'create_tag',
-      `Create tag at ${commit.shortOid}…`,
+      `Create tag at ${quoteSubject(commit)}`,
       commit.shortOid,
       ['tag', '--', name ?? NAME_TOKEN, commit.oid],
       { oid: commit.oid, requiresName: true, namePlaceholder: 'tag name' }
@@ -257,7 +257,7 @@ export class GitActionService {
   }
 
   private cherryPick(commit: CommitSummary): ActionPlan {
-    return this.plan('cherry_pick', `Cherry-pick ${commit.shortOid}`, commit.shortOid, ['cherry-pick', commit.oid], {
+    return this.plan('cherry_pick', `Cherry-pick ${quoteSubject(commit)}`, commit.shortOid, ['cherry-pick', commit.oid], {
       oid: commit.oid,
       requiresCleanTree: true,
       riskLevel: 'high'
@@ -265,7 +265,7 @@ export class GitActionService {
   }
 
   private revertCommit(commit: CommitSummary): ActionPlan {
-    return this.plan('revert_commit', `Revert ${commit.shortOid}`, commit.shortOid, ['revert', '--no-edit', commit.oid], {
+    return this.plan('revert_commit', `Revert ${quoteSubject(commit)}`, commit.shortOid, ['revert', '--no-edit', commit.oid], {
       oid: commit.oid,
       requiresCleanTree: true,
       riskLevel: 'high'
@@ -276,7 +276,7 @@ export class GitActionService {
     const mode = kind === 'reset_soft' ? '--soft' : kind === 'reset_mixed' ? '--mixed' : '--hard'
     return this.plan(
       kind,
-      `Reset current branch to ${commit.shortOid} (${mode.slice(2)})`,
+      `Reset to ${quoteSubject(commit)} (${mode.slice(2)})`,
       commit.shortOid,
       ['reset', mode, commit.oid],
       { oid: commit.oid, riskLevel: kind === 'reset_hard' ? 'high' : 'normal' }
@@ -313,6 +313,16 @@ export class GitActionService {
       }
     }
   }
+}
+
+/**
+ * Renders a commit's subject as a quoted label fragment. The menu truncates
+ * with CSS ellipsis, so the full subject is kept here; the short hash stays
+ * available through the "Copy commit hash" action.
+ */
+function quoteSubject(commit: CommitSummary): string {
+  const subject = commit.subject.trim()
+  return subject ? `"${subject}"` : commit.shortOid
 }
 
 /**
