@@ -3,6 +3,10 @@
   "version": "0.2.0",
   "private": true,
   "description": "A secure, browser-based Git graph desktop app built with Electron.",
+  "author": {
+    "name": "Rafael Aragao Morais",
+    "email": "ram.morais50@gmail.com"
+  },
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
@@ -46,6 +50,20 @@
     ],
     "win": {
       "target": "nsis"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development",
+      "maintainer": "Rafael Aragao Morais <ram.morais50@gmail.com>"
     }
   },
   "allowScripts": {

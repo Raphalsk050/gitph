@@ -1,0 +1,67 @@
+name: Build desktop apps
+
+# Runs on every push, and can be started by hand from the Actions tab with the
+# "Run workflow" button — that button lets you pick which branch to build.
+on:
+  push:
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the in-progress build for that branch,
+# so only the latest commit consumes runner minutes.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing must not cancel the others' builds.
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+          - os: ubuntu-latest
+            platform: linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer, preload and main
+        run: npm run build
+
+      - name: Package with electron-builder
+        run: npx --no-install electron-builder --${{ matrix.platform }} --publish never
+        env:
+          # No Apple signing certificate in CI: build an unsigned artifact
+          # instead of failing while searching for an identity.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitph-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.blockmap
+            release/latest*.yml
