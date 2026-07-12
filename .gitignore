@@ -10,3 +10,6 @@ _OLD/
 .DS_Store
 Thumbs.db
 
+
+# Generated graph fixtures
+graphify-out/
