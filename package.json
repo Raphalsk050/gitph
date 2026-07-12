@@ -1,6 +1,6 @@
 {
   "name": "gitph",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "A secure, browser-based Git graph desktop app built with Electron.",
   "author": {
@@ -48,6 +48,7 @@
       "out/**/*",
       "package.json"
     ],
+    "afterPack": "./scripts/afterPack.cjs",
     "win": {
       "target": "nsis"
     },
@@ -56,7 +57,8 @@
         "dmg",
         "zip"
       ],
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "identity": null
     },
     "linux": {
       "target": [
