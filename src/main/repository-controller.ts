@@ -1,6 +1,7 @@
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import { BrowserWindow, dialog } from 'electron'
+import { IPC_CHANNELS } from '../shared/contracts'
 import type {
   ActionDescriptor,
   ActionExecutionResult,
@@ -14,6 +15,7 @@ import type {
 import { GitActionService } from './git/action-service'
 import type { LoadedRepository } from './git/repository-service'
 import { RepositoryService } from './git/repository-service'
+import { RepositoryWatcher } from './git/repository-watcher'
 import { GitWorkingTreeService } from './git/working-tree-service'
 import { SettingsStore } from './settings-store'
 
@@ -29,6 +31,7 @@ export class RepositoryController {
   private readonly workingTree: GitWorkingTreeService
   private readonly settings: SettingsStore
   private readonly getWindow: () => BrowserWindow | null
+  private readonly watcher = new RepositoryWatcher()
   private current: LoadedRepository | null = null
   private recentRepositories: string[] = []
   private transition: Promise<void> = Promise.resolve()
@@ -267,6 +270,29 @@ export class RepositoryController {
     const loaded = await this.repositories.loadSnapshot(resolve(path))
     this.current = loaded
     this.recentRepositories = await this.settings.remember(loaded.snapshot.identity.root)
+    const root = loaded.snapshot.identity.root
+    this.watcher.watch(root, () => void this.handleRepoChange(root))
+  }
+
+  /**
+   * Reacts to on-disk changes in the open repository by reloading the snapshot
+   * and pushing it to the renderer, so commits, checkouts and working-tree edits
+   * made outside the app appear without a manual refresh. Serialized through the
+   * same queue as user operations, and a no-op once the repository has changed.
+   */
+  private async handleRepoChange(root: string): Promise<void> {
+    if (this.current?.snapshot.identity.root !== root) return
+    try {
+      const payload = await this.enqueue(async () => {
+        if (this.current?.snapshot.identity.root !== root) return null
+        this.current = await this.repositories.loadSnapshot(root)
+        return this.workspace()
+      })
+      if (payload) this.getWindow()?.webContents.send(IPC_CHANNELS.workspaceChanged, payload)
+    } catch {
+      // A transient read (e.g. during an external git operation) is ignored; the
+      // next settled change reloads cleanly.
+    }
   }
 
   private workspace(): WorkspacePayload {

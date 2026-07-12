@@ -268,6 +268,13 @@ export function useWorkspace(): WorkspaceController {
     return true
   }, [])
 
+  // Live updates: the main process watches the repository and pushes a fresh
+  // snapshot when it changes on disk. Applying it keeps the current selection so
+  // the view updates in place rather than jumping.
+  useEffect(() => {
+    return window.gitph.onWorkspaceChanged((payload) => applyWorkspace(payload))
+  }, [applyWorkspace])
+
   useEffect(() => {
     let active = true
     void (async () => {
