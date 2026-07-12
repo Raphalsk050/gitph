@@ -20,7 +20,22 @@ interface CommitGraphProps {
   onToggleSidebar(): void
 }
 
-const LANE_COLORS = ['#7e8dff', '#63a8ff', '#5bd6a4', '#e6b567', '#e58a9b', '#5bc8d4', '#b99bff', '#8fa0b3']
+// The same eight lane colours, ordered so neighbouring lanes land far apart on
+// the colour wheel instead of drifting through similar hues. Five of the eight
+// sit in the blue→purple range, so the three near-identical cool tones (blue,
+// violet, slate) are pushed to lanes 0, 4 and 7 — never adjacent — while the
+// distinct warm/green/cyan tones separate them. The first four lanes (the common
+// case) get the widest hue jumps: blue → amber → green → pink.
+const LANE_COLORS = [
+  '#63a8ff', // blue    ~213°
+  '#e6b567', // amber   ~37°
+  '#5bd6a4', // green   ~156°
+  '#e58a9b', // pink    ~349°
+  '#7e8dff', // violet  ~233°
+  '#5bc8d4', // cyan    ~186°
+  '#b99bff', // purple  ~258°
+  '#8fa0b3'  // slate   ~212°
+]
 const LANE_ROW_HEIGHT = 48
 const LANE_NODE_Y = LANE_ROW_HEIGHT / 2
 const LANE_SPACING = 24
