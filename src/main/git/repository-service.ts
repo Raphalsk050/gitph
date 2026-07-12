@@ -40,12 +40,10 @@ const LOG_FORMAT = '%x1f%H%x00%P%x00%at%x00%ct%x00%an%x00%ae%x00%s%x1e'
 export class RepositoryService {
   private readonly runner: GitCommandRunner
   private readonly graphBuilder: GitGraphBuilder
-  private readonly maxCommits: number
 
-  constructor(runner: GitCommandRunner, graphBuilder = new GitGraphBuilder(), maxCommits = 500) {
+  constructor(runner: GitCommandRunner, graphBuilder = new GitGraphBuilder()) {
     this.runner = runner
     this.graphBuilder = graphBuilder
-    this.maxCommits = maxCommits
   }
 
   async loadSnapshot(path: string): Promise<LoadedRepository> {
@@ -66,15 +64,12 @@ export class RepositoryService {
         ],
         { repo: identity.root }
       ),
+      // The full history is loaded; the renderer virtualizes the list so row
+      // count no longer bounds rendering cost. `git log` streams the whole graph
+      // in one pass, which stays fast even for very large repositories.
       this.runner.run(
-        [
-          'log',
-          '--topo-order',
-          '--all',
-          `--max-count=${this.maxCommits}`,
-          `--pretty=format:${LOG_FORMAT}`
-        ],
-        { repo: identity.root, check: false }
+        ['log', '--topo-order', '--all', `--pretty=format:${LOG_FORMAT}`],
+        { repo: identity.root, check: false, timeoutMs: 120_000 }
       ),
       this.runner.run(['remote'], { repo: identity.root })
     ])

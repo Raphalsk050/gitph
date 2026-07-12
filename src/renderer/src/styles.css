@@ -795,6 +795,16 @@ input::placeholder {
   min-width: 760px;
 }
 
+/* Holds only the on-screen slice of rows; translated to the window's offset so
+   the rows line up with the full-height scroll area behind them. */
+.commit-rows-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  will-change: transform;
+}
+
 .lane-connections {
   position: absolute;
   z-index: 1;
