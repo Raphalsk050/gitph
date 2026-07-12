@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Cloud, FilePen, GitBranch, Menu, Monitor, RefreshCw, Search, Tag, Wifi } from 'lucide-react'
 import type { GitRef, GraphEdge, GraphRow, RepositorySnapshot } from '@shared/contracts'
 
@@ -20,7 +20,22 @@ interface CommitGraphProps {
   onToggleSidebar(): void
 }
 
-const LANE_COLORS = ['#7e8dff', '#63a8ff', '#5bd6a4', '#e6b567', '#e58a9b', '#5bc8d4', '#b99bff', '#8fa0b3']
+// The same eight lane colours, ordered so neighbouring lanes land far apart on
+// the colour wheel instead of drifting through similar hues. Five of the eight
+// sit in the blue→purple range, so the three near-identical cool tones (blue,
+// violet, slate) are pushed to lanes 0, 4 and 7 — never adjacent — while the
+// distinct warm/green/cyan tones separate them. The first four lanes (the common
+// case) get the widest hue jumps: blue → amber → green → pink.
+const LANE_COLORS = [
+  '#63a8ff', // blue    ~213°
+  '#e6b567', // amber   ~37°
+  '#5bd6a4', // green   ~156°
+  '#e58a9b', // pink    ~349°
+  '#7e8dff', // violet  ~233°
+  '#5bc8d4', // cyan    ~186°
+  '#b99bff', // purple  ~258°
+  '#8fa0b3'  // slate   ~212°
+]
 const LANE_ROW_HEIGHT = 48
 const LANE_NODE_Y = LANE_ROW_HEIGHT / 2
 const LANE_SPACING = 24
@@ -29,6 +44,72 @@ const BRANCH_CONNECTOR_STROKE_WIDTH = 1.25
 // Empty column left of lane 0 so the first lane has breathing room from the row
 // edge, the way GitKraken insets its graph.
 const LANE_GUTTER = 14
+// Rows rendered above and below the viewport so fast scrolling never reveals a
+// gap before the window recomputes.
+const OVERSCAN_ROWS = 12
+// Rows the window covers before the first measurement (a generous first paint).
+const INITIAL_VISIBLE_ROWS = 60
+
+interface RowWindow {
+  /** First row index rendered (inclusive). */
+  start: number
+  /** One past the last row index rendered (exclusive). */
+  end: number
+}
+
+/**
+ * Tracks which slice of an evenly-sized list is on screen so the graph renders
+ * only the visible rows plus a small overscan — the "lazy list" behaviour that
+ * keeps a full-history graph responsive regardless of commit count.
+ *
+ * Measurement uses bounding rectangles rather than `offsetTop` so it stays
+ * correct no matter which ancestor is the offset parent, and scroll handling is
+ * coalesced into a single animation frame.
+ */
+function useRowWindow(
+  scrollRef: React.RefObject<HTMLElement | null>,
+  contentRef: React.RefObject<HTMLElement | null>,
+  rowCount: number
+): RowWindow {
+  const [window, setWindow] = useState<RowWindow>({ start: 0, end: Math.min(rowCount, INITIAL_VISIBLE_ROWS) })
+
+  const measure = useCallback(() => {
+    const scroller = scrollRef.current
+    const content = contentRef.current
+    if (!scroller || !content) return
+    // How far the content has scrolled above the viewport's top edge.
+    const viewTop = scroller.getBoundingClientRect().top - content.getBoundingClientRect().top
+    const firstVisible = Math.floor(viewTop / LANE_ROW_HEIGHT)
+    const visibleCount = Math.ceil(scroller.clientHeight / LANE_ROW_HEIGHT)
+    const start = Math.max(0, firstVisible - OVERSCAN_ROWS)
+    const end = Math.min(rowCount, firstVisible + visibleCount + OVERSCAN_ROWS)
+    setWindow((current) => (current.start === start && current.end === end ? current : { start, end }))
+  }, [scrollRef, contentRef, rowCount])
+
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    measure()
+    let frame = 0
+    const onScroll = (): void => {
+      if (frame !== 0) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        measure()
+      })
+    }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    const observer = new ResizeObserver(onScroll)
+    observer.observe(scroller)
+    return () => {
+      scroller.removeEventListener('scroll', onScroll)
+      observer.disconnect()
+      if (frame !== 0) cancelAnimationFrame(frame)
+    }
+  }, [measure])
+
+  return window
+}
 
 interface LaneConnectionGeometry {
   id: string
@@ -88,6 +169,31 @@ export function CommitGraph({
   )
   const laneWidth = LANE_GUTTER + laneCount * LANE_SPACING
 
+  const listRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const rowWindow = useRowWindow(listRef, contentRef, rows.length)
+  const totalHeight = rows.length * LANE_ROW_HEIGHT
+  const visibleRows = rows.slice(rowWindow.start, rowWindow.end)
+
+  // Keep the selected commit on screen even when it is not currently rendered:
+  // with virtualization the row may be unmounted, so the scroll is driven from
+  // the container rather than from the row element itself.
+  useLayoutEffect(() => {
+    if (selectedOid === null) return
+    const index = rows.findIndex((row) => row.commit.oid === selectedOid)
+    if (index < 0) return
+    const scroller = listRef.current
+    const content = contentRef.current
+    if (!scroller || !content) return
+    const contentTop = content.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
+    const rowTop = contentTop + index * LANE_ROW_HEIGHT
+    const rowBottom = rowTop + LANE_ROW_HEIGHT
+    if (rowTop < scroller.scrollTop) scroller.scrollTop = rowTop
+    else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
+      scroller.scrollTop = rowBottom - scroller.clientHeight
+    }
+  }, [selectedOid, rows])
+
   return (
     <main
       className={`commit-workspace${highlightedOids ? ' ancestry-highlight' : ''}`}
@@ -130,7 +236,7 @@ export function CommitGraph({
         <span>Author</span>
         <span>Committed</span>
       </div>
-      <div className="commit-list" role="listbox" aria-label="Commit history">
+      <div className="commit-list" role="listbox" aria-label="Commit history" ref={listRef}>
         {/* The WIP row sits above the lane coordinate space, so it never shifts
             the connection overlay that is measured from commit-list-content. */}
         {workingChanges > 0 && (
@@ -144,30 +250,37 @@ export function CommitGraph({
             <span className="wip-count">{workingChanges}</span>
           </button>
         )}
-        <div className="commit-list-content">
+        {/* Height spans the whole history so the scrollbar reflects every commit;
+            only the windowed slice below is actually mounted. */}
+        <div className="commit-list-content" ref={contentRef} style={{ height: totalHeight }}>
           {/* A filtered list renumbers rows, so lane connections would join
               commits that are not adjacent in history; show nodes only. */}
           {!normalizedQuery && (
-            <LaneConnections rows={rows} laneCount={laneCount} />
+            <LaneConnections rows={rows} laneCount={laneCount} window={rowWindow} />
           )}
-          {rows.map((row) => (
-            <CommitRow
-              row={row}
-              laneCount={laneCount}
-              selected={selectedOid === row.commit.oid}
-              isHead={row.commit.oid === headOid}
-              detached={detached}
-              onSelect={onSelect}
-              onSelectRef={onSelectRef}
-              onCheckoutRef={onCheckoutRef}
-              onContextMenu={onContextMenu}
-              onRefContextMenu={onRefContextMenu}
-              activeRefName={activeRefName}
-              highlightedOids={highlightedOids}
-              onActiveRefChange={setActiveRefName}
-              key={row.commit.oid}
-            />
-          ))}
+          <div
+            className="commit-rows-window"
+            style={{ transform: `translateY(${rowWindow.start * LANE_ROW_HEIGHT}px)` }}
+          >
+            {visibleRows.map((row) => (
+              <CommitRow
+                row={row}
+                laneCount={laneCount}
+                selected={selectedOid === row.commit.oid}
+                isHead={row.commit.oid === headOid}
+                detached={detached}
+                onSelect={onSelect}
+                onSelectRef={onSelectRef}
+                onCheckoutRef={onCheckoutRef}
+                onContextMenu={onContextMenu}
+                onRefContextMenu={onRefContextMenu}
+                activeRefName={activeRefName}
+                highlightedOids={highlightedOids}
+                onActiveRefChange={setActiveRefName}
+                key={row.commit.oid}
+              />
+            ))}
+          </div>
           {rows.length === 0 && (
             <div className="no-commits">
               <Search size={24} />
@@ -212,17 +325,11 @@ const CommitRow = memo(function CommitRow({
   highlightedOids,
   onActiveRefChange
 }: CommitRowProps): React.JSX.Element {
-  const element = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (selected) element.current?.scrollIntoView({ block: 'nearest' })
-  }, [selected])
-
   const decorations = buildRefDecorations(row.refs)
   const isMuted = highlightedOids !== null && !highlightedOids.has(row.commit.oid)
   const isHighlighted = highlightedOids?.has(row.commit.oid) ?? false
   return (
     <div
-      ref={element}
       role="option"
       tabIndex={0}
       aria-selected={selected}
@@ -460,21 +567,30 @@ function collectBranchSegmentOids(rows: readonly GraphRow[], startOid: string): 
   return segment
 }
 
-function LaneConnections({ rows, laneCount }: {
+function LaneConnections({ rows, laneCount, window }: {
   rows: readonly GraphRow[]
   laneCount: number
+  window: RowWindow
 }): React.JSX.Element | null {
-  const connections = useMemo(() => buildLaneConnections(rows), [rows])
+  const specs = useMemo(() => buildConnectionSpecs(rows), [rows])
   if (rows.length === 0) return null
 
+  const totalRows = rows.length
   const width = LANE_GUTTER + laneCount * LANE_SPACING
-  const height = rows.length * LANE_ROW_HEIGHT
+  const height = Math.max(LANE_ROW_HEIGHT, (window.end - window.start) * LANE_ROW_HEIGHT)
+  // Only connections whose row span crosses the visible window are built and
+  // drawn; the SVG is offset to the window's top and its paths use
+  // window-relative coordinates, so it never grows with the full history.
+  const connections = specs
+    .filter((spec) => spec.sourceIndex < window.end && (spec.targetIndex ?? totalRows) >= window.start)
+    .map((spec) => buildLaneConnection(spec, window.start, totalRows))
+
   return (
     <svg
       className="lane-connections"
       width={width}
       height={height}
-      viewBox={`0 0 ${width} ${height}`}
+      style={{ top: window.start * LANE_ROW_HEIGHT }}
       shapeRendering="geometricPrecision"
       aria-hidden="true"
     >
@@ -585,25 +701,32 @@ function authorTone(name: string): number {
 
 const FADE_OUT_ROWS = 3
 
+interface LaneConnectionSpec {
+  edge: GraphEdge
+  sourceIndex: number
+  targetIndex: number | null
+  edgeIndex: number
+}
+
 /**
- * Builds one continuous SVG path per commit-parent relationship.
+ * Resolves every commit-parent relationship to a row-index span, once per graph.
  *
- * Responsibility: keep connection geometry and gradients independent from row
- * borders so long lanes cannot develop seams or orphaned visual fragments.
+ * Responsibility: capture the render-neutral shape of each connection (its lanes
+ * and the rows it joins) so the view can cheaply select and draw only the spans
+ * that cross the visible window, keeping geometry independent from row borders.
  */
-function buildLaneConnections(rows: readonly GraphRow[]): LaneConnectionGeometry[] {
+function buildConnectionSpecs(rows: readonly GraphRow[]): LaneConnectionSpec[] {
   const visualIndexByOid = new Map(rows.map((row, index) => [row.commit.oid, index]))
-  const bottomY = rows.length * LANE_ROW_HEIGHT
-  const connections: LaneConnectionGeometry[] = []
+  const specs: LaneConnectionSpec[] = []
 
   rows.forEach((row, sourceIndex) => {
     row.edges.forEach((edge, edgeIndex) => {
       const targetIndex = visualIndexByOid.get(edge.toOid)
       if (targetIndex !== undefined && targetIndex <= sourceIndex) return
-      connections.push(buildLaneConnection(edge, sourceIndex, targetIndex ?? null, edgeIndex, bottomY))
+      specs.push({ edge, sourceIndex, targetIndex: targetIndex ?? null, edgeIndex })
     })
   })
-  return connections
+  return specs
 }
 
 /**
@@ -615,20 +738,24 @@ function buildLaneConnections(rows: readonly GraphRow[]): LaneConnectionGeometry
  * - `parent` changing lane: the ending branch runs down its own column (which
  *   the lane builder reserves as a tail) and enters the parent horizontally at
  *   the parent's row, keeping the branch's color.
- * - Parent beyond the loaded window (`targetIndex === null`): the line follows
- *   its column to the bottom of the graph and fades out, signalling that
- *   history continues past the commit limit.
+ * - Parent that is not part of the graph (`targetIndex === null`): the line
+ *   follows its column to the bottom of the graph and fades out, signalling
+ *   that history continues past what is loaded.
+ *
+ * Coordinates are expressed relative to `rowOffset` (the first row of the
+ * visible window) so the connection SVG stays small no matter how tall the
+ * full history is.
  */
 function buildLaneConnection(
-  edge: GraphEdge,
-  sourceIndex: number,
-  targetIndex: number | null,
-  edgeIndex: number,
-  bottomY: number
+  spec: LaneConnectionSpec,
+  rowOffset: number,
+  totalRows: number
 ): LaneConnectionGeometry {
+  const { edge, sourceIndex, targetIndex, edgeIndex } = spec
   const sourceX = LANE_GUTTER + edge.fromLane * LANE_SPACING + LANE_SPACING / 2
   const targetX = LANE_GUTTER + edge.toLane * LANE_SPACING + LANE_SPACING / 2
-  const sourceY = sourceIndex * LANE_ROW_HEIGHT + LANE_NODE_Y
+  const sourceY = (sourceIndex - rowOffset) * LANE_ROW_HEIGHT + LANE_NODE_Y
+  const bottomY = (totalRows - rowOffset) * LANE_ROW_HEIGHT
   const changesLane = edge.fromLane !== edge.toLane
   const sourceColor = laneColor(edge.fromLane)
   const targetColor = laneColor(edge.toLane)
@@ -657,7 +784,7 @@ function buildLaneConnection(
       )
     }
   } else {
-    targetY = targetIndex * LANE_ROW_HEIGHT + LANE_NODE_Y
+    targetY = (targetIndex - rowOffset) * LANE_ROW_HEIGHT + LANE_NODE_Y
     if (!changesLane) {
       path = `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`
     } else if (edge.kind === 'merge') {
