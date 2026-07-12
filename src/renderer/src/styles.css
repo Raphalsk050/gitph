@@ -796,9 +796,13 @@ input::placeholder {
 }
 
 /* Holds only the on-screen slice of rows; translated to the window's offset so
-   the rows line up with the full-height scroll area behind them. */
+   the rows line up with the full-height scroll area behind them. The transform
+   makes this a stacking context, so its z-index must sit above
+   .lane-connections (z-index 1) for the commit node dots to paint over the
+   lane lines rather than behind them. */
 .commit-rows-window {
   position: absolute;
+  z-index: 2;
   top: 0;
   left: 0;
   right: 0;

@@ -24,6 +24,12 @@ const api: GitphApi = {
     const listener = (_event: Electron.IpcRendererEvent, maximized: boolean): void => callback(maximized)
     ipcRenderer.on(IPC_CHANNELS.windowMaximizedChanged, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.windowMaximizedChanged, listener)
+  },
+  onWorkspaceChanged: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]): void =>
+      callback(payload)
+    ipcRenderer.on(IPC_CHANNELS.workspaceChanged, listener)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.workspaceChanged, listener)
   }
 }
 

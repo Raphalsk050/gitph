@@ -54,7 +54,6 @@ export class GitGraphBuilder {
           toOid: parentOid,
           fromLane: lane,
           toLane: parentLane,
-          colorIndex: parentLane % 8,
           kind: parentIndex > 0 ? 'merge' : 'parent'
         }
       })
@@ -66,8 +65,7 @@ export class GitGraphBuilder {
         rowIndex,
         lane,
         refs: [...(refsByOid.get(commit.oid) ?? [])],
-        edges,
-        activeLanes: lanes.map((slot) => slot?.oid ?? null)
+        edges
       })
     })
 
