@@ -48,6 +48,7 @@ const ACTION_ICONS: Record<GitActionKind, LucideIcon> = {
   fetch_remote: ArrowDownToLine,
   pull_ff: ArrowDownToLine,
   push_head: ArrowUpFromLine,
+  publish_branch: ArrowUpFromLine,
   switch_branch: ArrowRightLeft,
   track_remote: GitBranchPlus,
   merge_branch: GitMerge,
@@ -185,6 +186,15 @@ export function App(): React.JSX.Element {
     void workspace.selectCommit(ref.displayOid)
   }
 
+  const checkoutRef = async (ref: GitRef): Promise<void> => {
+    if (workspace.loading || ref.isHead) return
+    const actionKind: GitActionKind | null =
+      ref.kind === 'local_branch' ? 'switch_branch' : ref.kind === 'remote_branch' ? 'track_remote' : null
+    if (actionKind === null) return
+    const action = (await workspace.listActions(ref.fullName)).find((candidate) => candidate.kind === actionKind)
+    if (action) await workspace.runAction(action)
+  }
+
   const selectCommit = (oid: string): void => {
     setDetailsOpen(true)
     setWorkingSelected(false)
@@ -194,7 +204,7 @@ export function App(): React.JSX.Element {
   const workingChanges = workspace.snapshot?.status.entries.length ?? 0
 
   const actionMenuItem = (action: ActionDescriptor): ContextMenuItem => ({
-    id: `${action.kind}:${action.refName ?? action.oid ?? ''}`,
+    id: `${action.kind}:${action.refName ?? action.oid ?? ''}:${action.remoteName ?? ''}`,
     label: action.label,
     group: ACTION_GROUPS[action.kind],
     icon: ACTION_ICONS[action.kind],
@@ -299,7 +309,10 @@ export function App(): React.JSX.Element {
                 setWorkingSelected(true)
               }}
               onSelect={selectCommit}
+              onSelectRef={selectRef}
+              onCheckoutRef={(ref) => void checkoutRef(ref)}
               onContextMenu={(event, row) => void openCommitMenu(event, row)}
+              onRefContextMenu={(event, ref) => void openRefMenu(event, ref)}
               onRefresh={() => void workspace.refresh()}
               onFetch={() => void requestFetch()}
               onToggleSidebar={() => setSidebarOpen((open) => !open)}

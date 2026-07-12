@@ -5,6 +5,7 @@ import {
   parseChangedFiles,
   parseCommits,
   parseRefs,
+  parseRemoteNames,
   parseRepoIdentity,
   parseStatus
 } from './parser'
@@ -49,7 +50,7 @@ export class RepositoryService {
 
   async loadSnapshot(path: string): Promise<LoadedRepository> {
     const identity = await this.discover(path)
-    const [statusResult, refsResult, commitsResult] = await Promise.all([
+    const [statusResult, refsResult, commitsResult, remotesResult] = await Promise.all([
       this.runner.run(['status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all'], {
         repo: identity.root
       }),
@@ -74,15 +75,17 @@ export class RepositoryService {
           `--pretty=format:${LOG_FORMAT}`
         ],
         { repo: identity.root, check: false }
-      )
+      ),
+      this.runner.run(['remote'], { repo: identity.root })
     ])
 
     const status = parseStatus(statusResult.stdout)
     const refs = parseRefs(refsResult.stdout)
+    const remotes = parseRemoteNames(remotesResult.stdout)
     const commits = commitsResult.exitCode === 0 ? parseCommits(commitsResult.stdout) : []
     const graph = this.graphBuilder.build(commits, refs)
     return {
-      snapshot: { identity, status, refs, graph },
+      snapshot: { identity, status, remotes, refs, graph },
       commits: new Map(commits.map((commit) => [commit.oid, commit]))
     }
   }

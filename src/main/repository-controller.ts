@@ -118,13 +118,18 @@ export class RepositoryController {
       ? this.current.snapshot.refs.find((candidate) => candidate.fullName === refName)
       : undefined
     if (refName && ref === undefined) throw new Error('The selected ref no longer exists.')
-    return this.actions.listActions(ref)
+    return this.actions.listActions(ref, this.current.snapshot.refs, this.current.snapshot.remotes)
   }
 
   async executeAction(request: ActionRequest): Promise<ActionExecutionResult> {
     return await this.enqueue(async () => {
       if (this.current === null) throw new Error('Open a Git repository first.')
-      const plan = this.actions.resolve(request, this.current.snapshot.refs, this.current.commits)
+      const plan = this.actions.resolve(
+        request,
+        this.current.snapshot.refs,
+        this.current.snapshot.remotes,
+        this.current.commits
+      )
       const result = await this.actions.execute(
         this.current.snapshot.identity.root,
         plan,

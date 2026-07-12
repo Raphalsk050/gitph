@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { FilePen, GitBranch, Menu, RefreshCw, Search, Wifi } from 'lucide-react'
-import type { GraphEdge, GraphRow, RepositorySnapshot } from '@shared/contracts'
+import { Cloud, FilePen, GitBranch, Menu, Monitor, RefreshCw, Search, Tag, Wifi } from 'lucide-react'
+import type { GitRef, GraphEdge, GraphRow, RepositorySnapshot } from '@shared/contracts'
 
 interface CommitGraphProps {
   snapshot: RepositorySnapshot
@@ -11,7 +11,10 @@ interface CommitGraphProps {
   workingSelected: boolean
   onSelectWorking(): void
   onSelect(oid: string): void
+  onSelectRef(ref: GitRef): void
+  onCheckoutRef(ref: GitRef): void
   onContextMenu(event: React.MouseEvent, row: GraphRow): void
+  onRefContextMenu(event: React.MouseEvent, ref: GitRef): void
   onRefresh(): void
   onFetch(): void
   onToggleSidebar(): void
@@ -21,6 +24,8 @@ const LANE_COLORS = ['#7e8dff', '#63a8ff', '#5bd6a4', '#e6b567', '#e58a9b', '#5b
 const LANE_ROW_HEIGHT = 48
 const LANE_NODE_Y = LANE_ROW_HEIGHT / 2
 const LANE_SPACING = 24
+const COMMIT_COLUMN_GAP = 8
+const BRANCH_CONNECTOR_STROKE_WIDTH = 1.25
 // Empty column left of lane 0 so the first lane has breathing room from the row
 // edge, the way GitKraken insets its graph.
 const LANE_GUTTER = 14
@@ -50,12 +55,16 @@ export function CommitGraph({
   workingSelected,
   onSelectWorking,
   onSelect,
+  onSelectRef,
+  onCheckoutRef,
   onContextMenu,
+  onRefContextMenu,
   onRefresh,
   onFetch,
   onToggleSidebar
 }: CommitGraphProps): React.JSX.Element {
   const [query, setQuery] = useState('')
+  const [activeRefName, setActiveRefName] = useState<string | null>(null)
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const rows = useMemo(() => {
     if (!normalizedQuery) return snapshot.graph.rows
@@ -69,9 +78,21 @@ export function CommitGraph({
   const laneCount = Math.max(1, snapshot.graph.maxLanes)
   const headOid = snapshot.identity.headOid
   const detached = headOid !== null && snapshot.identity.headRef === null
+  const activeRef = useMemo(
+    () => snapshot.refs.find((ref) => ref.fullName === activeRefName) ?? null,
+    [activeRefName, snapshot.refs]
+  )
+  const highlightedOids = useMemo(
+    () => activeRef ? collectBranchSegmentOids(snapshot.graph.rows, activeRef.displayOid) : null,
+    [activeRef, snapshot.graph.rows]
+  )
+  const laneWidth = LANE_GUTTER + laneCount * LANE_SPACING
 
   return (
-    <main className="commit-workspace">
+    <main
+      className={`commit-workspace${highlightedOids ? ' ancestry-highlight' : ''}`}
+      style={{ '--lane-width': `${laneWidth}px` } as React.CSSProperties}
+    >
       <div className="commit-toolbar">
         <button type="button" className="icon-button sidebar-toggle" aria-label="Toggle branches" onClick={onToggleSidebar}>
           <Menu size={18} />
@@ -103,7 +124,9 @@ export function CommitGraph({
       </div>
 
       <div className="commit-columns" aria-hidden="true">
-        <span>Graph &amp; message</span>
+        <span>Branch / tag</span>
+        <span>Graph</span>
+        <span>Commit message</span>
         <span>Author</span>
         <span>Committed</span>
       </div>
@@ -124,7 +147,9 @@ export function CommitGraph({
         <div className="commit-list-content">
           {/* A filtered list renumbers rows, so lane connections would join
               commits that are not adjacent in history; show nodes only. */}
-          {!normalizedQuery && <LaneConnections rows={rows} laneCount={laneCount} />}
+          {!normalizedQuery && (
+            <LaneConnections rows={rows} laneCount={laneCount} />
+          )}
           {rows.map((row) => (
             <CommitRow
               row={row}
@@ -133,7 +158,13 @@ export function CommitGraph({
               isHead={row.commit.oid === headOid}
               detached={detached}
               onSelect={onSelect}
+              onSelectRef={onSelectRef}
+              onCheckoutRef={onCheckoutRef}
               onContextMenu={onContextMenu}
+              onRefContextMenu={onRefContextMenu}
+              activeRefName={activeRefName}
+              highlightedOids={highlightedOids}
+              onActiveRefChange={setActiveRefName}
               key={row.commit.oid}
             />
           ))}
@@ -157,7 +188,13 @@ interface CommitRowProps {
   isHead: boolean
   detached: boolean
   onSelect(oid: string): void
+  onSelectRef(ref: GitRef): void
+  onCheckoutRef(ref: GitRef): void
   onContextMenu(event: React.MouseEvent, row: GraphRow): void
+  onRefContextMenu(event: React.MouseEvent, ref: GitRef): void
+  activeRefName: string | null
+  highlightedOids: ReadonlySet<string> | null
+  onActiveRefChange(refName: string | null): void
 }
 
 const CommitRow = memo(function CommitRow({
@@ -167,58 +204,266 @@ const CommitRow = memo(function CommitRow({
   isHead,
   detached,
   onSelect,
-  onContextMenu
+  onSelectRef,
+  onCheckoutRef,
+  onContextMenu,
+  onRefContextMenu,
+  activeRefName,
+  highlightedOids,
+  onActiveRefChange
 }: CommitRowProps): React.JSX.Element {
-  const element = useRef<HTMLButtonElement>(null)
+  const element = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (selected) element.current?.scrollIntoView({ block: 'nearest' })
   }, [selected])
 
-  // The checked-out branch chip leads the row; a detached checkout has no
-  // branch ref, so it gets a synthetic HEAD chip instead.
-  const refs = [...row.refs].sort((a, b) => Number(b.isHead) - Number(a.isHead))
+  const decorations = buildRefDecorations(row.refs)
+  const isMuted = highlightedOids !== null && !highlightedOids.has(row.commit.oid)
+  const isHighlighted = highlightedOids?.has(row.commit.oid) ?? false
   return (
-    <button
+    <div
       ref={element}
-      type="button"
       role="option"
+      tabIndex={0}
       aria-selected={selected}
-      className={`commit-row${selected ? ' selected' : ''}`}
-      style={{ '--lane-color': laneColor(row.lane) } as React.CSSProperties}
+      className={`commit-row${selected ? ' selected' : ''}${isMuted ? ' ancestry-muted' : ''}${isHighlighted ? ' ancestry-active' : ''}`}
+      style={{ '--lane-color': isHead ? 'var(--accent)' : laneColor(row.lane) } as React.CSSProperties}
       onClick={() => onSelect(row.commit.oid)}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        onSelect(row.commit.oid)
+      }}
       onContextMenu={(event) => onContextMenu(event, row)}
     >
-      <div className="commit-primary">
-        <LaneGraph
-          row={row}
-          laneCount={laneCount}
-          selected={selected}
-          isHead={isHead}
-        />
-        <div className="commit-copy">
-          <div className="commit-subject-line">
-            <span className="commit-subject">{row.commit.subject || '(no subject)'}</span>
-            {detached && isHead && <span className="commit-ref detached">HEAD</span>}
-            {refs.slice(0, 2).map((ref) => (
-              <span className={`commit-ref ${ref.kind}${ref.isHead ? ' head' : ''}`} key={ref.fullName}>
-                {ref.shortName}
-              </span>
-            ))}
-            {refs.length > 2 && <span className="commit-ref more">+{refs.length - 2}</span>}
-          </div>
-          <span className="commit-oid">{row.commit.shortOid}</span>
-        </div>
+      <div className="branch-tip-cell">
+        {detached && isHead ? (
+          <span className="branch-ref-label detached">HEAD</span>
+        ) : decorations.length > 0 ? (
+          <RefDecorationCluster
+            decorations={decorations}
+            activeRefName={activeRefName}
+            onSelectRef={onSelectRef}
+            onCheckoutRef={onCheckoutRef}
+            onContextMenu={onRefContextMenu}
+            onActiveRefChange={onActiveRefChange}
+          />
+        ) : null}
+        {(decorations.length > 0 || (detached && isHead)) && (
+          <span className="branch-tip-line" aria-hidden="true">
+            <svg width="100%" height={LANE_ROW_HEIGHT} shapeRendering="geometricPrecision">
+              <line
+                x1="0"
+                y1={LANE_NODE_Y}
+                x2="100%"
+                y2={LANE_NODE_Y}
+                stroke="var(--lane-color)"
+                strokeWidth={BRANCH_CONNECTOR_STROKE_WIDTH}
+                strokeLinecap="butt"
+              />
+            </svg>
+          </span>
+        )}
+      </div>
+      <LaneGraph row={row} laneCount={laneCount} selected={selected} isHead={isHead} />
+      <div className="commit-copy">
+        <span className="commit-subject">{row.commit.subject || '(no subject)'}</span>
+        <span className="commit-oid">{row.commit.shortOid}</span>
       </div>
       <span className="commit-author" title={row.commit.authorEmail}>
         <span className="commit-avatar" data-tone={authorTone(row.commit.author)}>{authorInitials(row.commit.author)}</span>
         {row.commit.author}
       </span>
       <span className="commit-time" title={formatFullDate(row.commit.commitTime)}>{relativeTime(row.commit.commitTime)}</span>
-    </button>
+    </div>
   )
 })
 
-function LaneConnections({ rows, laneCount }: { rows: readonly GraphRow[]; laneCount: number }): React.JSX.Element | null {
+interface RefDecoration {
+  id: string
+  label: string
+  primaryRef: GitRef
+  refs: GitRef[]
+  kind: GitRef['kind']
+  isHead: boolean
+  hasLocal: boolean
+  hasRemote: boolean
+}
+
+interface RefDecorationClusterProps {
+  decorations: readonly RefDecoration[]
+  activeRefName: string | null
+  onSelectRef(ref: GitRef): void
+  onCheckoutRef(ref: GitRef): void
+  onContextMenu(event: React.MouseEvent, ref: GitRef): void
+  onActiveRefChange(refName: string | null): void
+}
+
+function RefDecorationCluster({
+  decorations,
+  activeRefName,
+  onSelectRef,
+  onCheckoutRef,
+  onContextMenu,
+  onActiveRefChange
+}: RefDecorationClusterProps): React.JSX.Element {
+  return (
+    <div
+      className="branch-decoration-cluster"
+      onMouseLeave={() => onActiveRefChange(null)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onActiveRefChange(null)
+      }}
+    >
+      <RefDecorationButton
+        decoration={decorations[0]}
+        activeRefName={activeRefName}
+        onSelectRef={onSelectRef}
+        onCheckoutRef={onCheckoutRef}
+        onContextMenu={onContextMenu}
+        onActiveRefChange={onActiveRefChange}
+      />
+      {decorations.length > 1 && <span className="branch-ref-count">+{decorations.length - 1}</span>}
+      {decorations.length > 1 && (
+        <div className="branch-ref-overflow">
+          {decorations.slice(1).map((decoration) => (
+            <RefDecorationButton
+              decoration={decoration}
+              activeRefName={activeRefName}
+              onSelectRef={onSelectRef}
+              onCheckoutRef={onCheckoutRef}
+              onContextMenu={onContextMenu}
+              onActiveRefChange={onActiveRefChange}
+              key={decoration.id}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RefDecorationButton({
+  decoration,
+  activeRefName,
+  onSelectRef,
+  onCheckoutRef,
+  onContextMenu,
+  onActiveRefChange
+}: {
+  decoration: RefDecoration
+  activeRefName: string | null
+  onSelectRef(ref: GitRef): void
+  onCheckoutRef(ref: GitRef): void
+  onContextMenu(event: React.MouseEvent, ref: GitRef): void
+  onActiveRefChange(refName: string | null): void
+}): React.JSX.Element {
+  const isActive = decoration.refs.some((ref) => ref.fullName === activeRefName)
+  return (
+    <button
+      type="button"
+      className={`branch-ref-label ${decoration.kind}${decoration.isHead ? ' head' : ''}${isActive ? ' ref-active' : ''}${activeRefName && !isActive ? ' ref-muted' : ''}`}
+      title={decoration.refs.map((ref) => ref.shortName).join(', ')}
+      onMouseEnter={() => onActiveRefChange(decoration.primaryRef.fullName)}
+      onFocus={() => onActiveRefChange(decoration.primaryRef.fullName)}
+      onClick={(event) => {
+        event.stopPropagation()
+        onSelectRef(decoration.primaryRef)
+      }}
+      onDoubleClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onCheckoutRef(decoration.primaryRef)
+      }}
+      onContextMenu={(event) => {
+        event.stopPropagation()
+        onContextMenu(event, decoration.primaryRef)
+      }}
+    >
+      {decoration.isHead && <span className="branch-head-check">✓</span>}
+      <span>{decoration.label}</span>
+      {decoration.hasLocal && <Monitor size={11} aria-label="Local branch" />}
+      {decoration.hasRemote && <Cloud size={11} aria-label="Remote branch" />}
+      {decoration.kind === 'tag' && <Tag size={11} aria-label="Tag" />}
+    </button>
+  )
+}
+
+/** Combines a local branch and its tracking ref into one compact decoration. */
+function buildRefDecorations(refs: readonly GitRef[]): RefDecoration[] {
+  const visible = refs.filter((ref) => !(ref.kind === 'remote_branch' && ref.fullName.endsWith('/HEAD')))
+  const remoteRefs = visible.filter((ref) => ref.kind === 'remote_branch')
+  const claimedRemotes = new Set<string>()
+  const decorations: RefDecoration[] = []
+
+  for (const local of visible.filter((ref) => ref.kind === 'local_branch')) {
+    const matchingRemotes = remoteRefs.filter((remote) => {
+      if (claimedRemotes.has(remote.fullName)) return false
+      return remote.shortName === local.upstream || remoteBranchName(remote) === local.shortName
+    })
+    for (const remote of matchingRemotes) claimedRemotes.add(remote.fullName)
+    decorations.push(makeRefDecoration(local.shortName, local, [local, ...matchingRemotes]))
+  }
+
+  for (const ref of visible) {
+    if (ref.kind === 'local_branch') continue
+    if (ref.kind === 'remote_branch' && claimedRemotes.has(ref.fullName)) continue
+    decorations.push(makeRefDecoration(ref.shortName, ref, [ref]))
+  }
+
+  return decorations.sort((left, right) => {
+    const headOrder = Number(right.isHead) - Number(left.isHead)
+    if (headOrder !== 0) return headOrder
+    const kindOrder = refKindOrder(left.kind) - refKindOrder(right.kind)
+    return kindOrder !== 0 ? kindOrder : left.label.localeCompare(right.label)
+  })
+}
+
+function makeRefDecoration(label: string, primaryRef: GitRef, refs: GitRef[]): RefDecoration {
+  return {
+    id: refs.map((ref) => ref.fullName).join('|'),
+    label,
+    primaryRef,
+    refs,
+    kind: primaryRef.kind,
+    isHead: refs.some((ref) => ref.isHead),
+    hasLocal: refs.some((ref) => ref.kind === 'local_branch'),
+    hasRemote: refs.some((ref) => ref.kind === 'remote_branch')
+  }
+}
+
+function remoteBranchName(ref: GitRef): string {
+  const separator = ref.shortName.indexOf('/')
+  return separator >= 0 ? ref.shortName.slice(separator + 1) : ref.shortName
+}
+
+function refKindOrder(kind: GitRef['kind']): number {
+  if (kind === 'local_branch') return 0
+  if (kind === 'remote_branch') return 1
+  if (kind === 'tag') return 2
+  return 3
+}
+
+/** Returns the first-parent lane segment before the branch converges with its base. */
+function collectBranchSegmentOids(rows: readonly GraphRow[], startOid: string): ReadonlySet<string> {
+  const rowsByOid = new Map(rows.map((row) => [row.commit.oid, row]))
+  const segment = new Set<string>()
+  let row = rowsByOid.get(startOid)
+  const branchLane = row?.lane
+  while (row && row.lane === branchLane && !segment.has(row.commit.oid)) {
+    segment.add(row.commit.oid)
+    const firstParent = row.edges.find((edge) => edge.kind === 'parent')
+    if (!firstParent || firstParent.toLane !== branchLane) break
+    row = rowsByOid.get(firstParent.toOid)
+  }
+  return segment
+}
+
+function LaneConnections({ rows, laneCount }: {
+  rows: readonly GraphRow[]
+  laneCount: number
+}): React.JSX.Element | null {
   const connections = useMemo(() => buildLaneConnections(rows), [rows])
   if (rows.length === 0) return null
 
@@ -257,6 +502,7 @@ function LaneConnections({ rows, laneCount }: { rows: readonly GraphRow[]; laneC
       </defs>
       {connections.map((connection) => (
         <path
+          className="lane-connection-path"
           d={connection.path}
           fill="none"
           stroke={connection.gradientId ? `url(#${connection.gradientId})` : connection.strokeColor}
@@ -287,6 +533,18 @@ function LaneGraph({ row, laneCount, selected, isHead }: {
       shapeRendering="geometricPrecision"
       aria-hidden="true"
     >
+      {(row.refs.length > 0 || isHead) && (
+        <line
+          className="branch-node-connector"
+          x1={-COMMIT_COLUMN_GAP}
+          y1={LANE_NODE_Y}
+          x2={nodeX}
+          y2={LANE_NODE_Y}
+          stroke={nodeColor}
+          strokeWidth={BRANCH_CONNECTOR_STROKE_WIDTH}
+          strokeLinecap="butt"
+        />
+      )}
       {selected && <circle className="selected-node-ring" cx={nodeX} cy={LANE_NODE_Y} r="8.5" fill="none" stroke="var(--accent)" strokeOpacity="0.65" strokeWidth="3" />}
       {isHead ? (
         <>

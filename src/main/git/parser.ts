@@ -110,6 +110,15 @@ export function parseRefs(output: string): GitRef[] {
   return refs
 }
 
+export function parseRemoteNames(output: string): string[] {
+  const remotes = new Set<string>()
+  for (const line of output.split(/\r?\n/u)) {
+    const name = line.trim()
+    if (name) remotes.add(name)
+  }
+  return [...remotes]
+}
+
 export function parseCommits(output: string): CommitSummary[] {
   const commits: CommitSummary[] = []
   for (const rawRecord of output.split('\x1e')) {
@@ -181,4 +190,3 @@ function refKind(fullName: string): RefKind | null {
 function looksLikeObjectId(value: string): boolean {
   return (value.length === 40 || value.length === 64) && /^[0-9a-f]+$/iu.test(value)
 }
-

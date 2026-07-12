@@ -31,14 +31,15 @@ export class GitActionService {
     this.runner = runner
   }
 
-  listActions(ref: GitRef | undefined): ActionDescriptor[] {
+  listActions(ref: GitRef | undefined, refs: readonly GitRef[], remotes: readonly string[]): ActionDescriptor[] {
     if (ref === undefined) {
       return [this.fetchAll(), this.pullFf(), this.pushHead()].map((plan) => plan.descriptor)
     }
     if (ref.kind === 'local_branch') {
+      const publishPlans = this.publishPlans(ref, refs, remotes)
       const plans = ref.isHead
-        ? [this.pullFf(), this.pushHead()]
-        : [this.switchBranch(ref), this.mergeBranch(ref), this.rebaseOntoBranch(ref), this.deleteBranch(ref)]
+        ? (publishPlans.length > 0 ? publishPlans : [this.pullFf(), this.pushHead()])
+        : [...publishPlans, this.switchBranch(ref), this.mergeBranch(ref), this.rebaseOntoBranch(ref), this.deleteBranch(ref)]
       return plans.map((plan) => plan.descriptor)
     }
     if (ref.kind === 'remote_branch') {
@@ -66,6 +67,7 @@ export class GitActionService {
   resolve(
     request: ActionRequest,
     refs: readonly GitRef[],
+    remotes: readonly string[],
     commits: ReadonlyMap<string, CommitSummary>
   ): ActionPlan {
     switch (request.kind) {
@@ -75,6 +77,11 @@ export class GitActionService {
         return this.pullFf()
       case 'push_head':
         return this.pushHead()
+      case 'publish_branch':
+        return this.publishBranch(
+          this.requireRef(request, refs, 'local_branch'),
+          this.requireRemote(request, remotes)
+        )
       case 'switch_branch':
         return this.switchBranch(this.requireRef(request, refs, 'local_branch'))
       case 'merge_branch':
@@ -140,6 +147,14 @@ export class GitActionService {
     return commit
   }
 
+  private requireRemote(request: ActionRequest, remotes: readonly string[]): string {
+    if (!request.remoteName) throw new Error('This action requires a remote.')
+    if (!remotes.includes(request.remoteName)) {
+      throw new Error('The selected remote no longer exists. Refresh the repository.')
+    }
+    return request.remoteName
+  }
+
   private fetchAll(): ActionPlan {
     return this.plan('fetch_all', 'Fetch all remotes', 'all remotes', ['fetch', '--all', '--prune', '--tags'])
   }
@@ -152,6 +167,34 @@ export class GitActionService {
 
   private pushHead(): ActionPlan {
     return this.plan('push_head', 'Push current branch', 'upstream', ['push'])
+  }
+
+  private publishPlans(ref: GitRef, refs: readonly GitRef[], remotes: readonly string[]): ActionPlan[] {
+    return this.publishCandidates(ref, remotes)
+      .filter((remote) => !refs.some((candidate) => candidate.fullName === `refs/remotes/${remote}/${ref.shortName}`))
+      .map((remote) => this.publishBranch(ref, remote))
+  }
+
+  private publishCandidates(ref: GitRef, remotes: readonly string[]): string[] {
+    if (ref.upstream) {
+      const upstreamRemote = [...remotes]
+        .sort((left, right) => right.length - left.length)
+        .find((remote) => ref.upstream === remote || ref.upstream?.startsWith(`${remote}/`))
+      if (upstreamRemote) return [upstreamRemote]
+    }
+    if (remotes.includes('origin')) return ['origin']
+    if (remotes.length === 1) return [remotes[0]]
+    return [...remotes]
+  }
+
+  private publishBranch(ref: GitRef, remote: string): ActionPlan {
+    return this.plan(
+      'publish_branch',
+      `Publish ${ref.shortName} to ${remote}`,
+      remote,
+      ['push', '--set-upstream', `--repo=${remote}`, `${ref.fullName}:${ref.fullName}`],
+      { refName: ref.fullName, remoteName: remote }
+    )
   }
 
   private switchBranch(ref: GitRef): ActionPlan {
@@ -290,6 +333,7 @@ export class GitActionService {
     argv: string[],
     options: {
       refName?: string
+      remoteName?: string
       oid?: string
       requiresName?: boolean
       namePlaceholder?: string
@@ -305,6 +349,7 @@ export class GitActionService {
         target,
         command: ['git', ...argv].join(' '),
         refName: options.refName,
+        remoteName: options.remoteName,
         oid: options.oid,
         requiresName: options.requiresName,
         namePlaceholder: options.namePlaceholder,

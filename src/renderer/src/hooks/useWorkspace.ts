@@ -144,6 +144,7 @@ export function useWorkspace(): WorkspaceController {
       const result = await window.gitph.executeAction({
         kind: action.kind,
         refName: action.refName,
+        remoteName: action.remoteName,
         oid: action.oid,
         name
       })

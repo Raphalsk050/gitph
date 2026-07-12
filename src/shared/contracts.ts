@@ -88,6 +88,7 @@ export interface CommitDetails {
 export interface RepositorySnapshot {
   identity: RepoIdentity
   status: StatusSnapshot
+  remotes: string[]
   refs: GitRef[]
   graph: GraphModel
 }
@@ -103,6 +104,7 @@ export const GIT_ACTION_KINDS = [
   'fetch_remote',
   'pull_ff',
   'push_head',
+  'publish_branch',
   'switch_branch',
   'track_remote',
   'merge_branch',
@@ -128,6 +130,7 @@ export interface ActionDescriptor {
   target: string
   command: string
   refName?: string
+  remoteName?: string
   oid?: string
   /** When set, the renderer must collect a ref name before executing. */
   requiresName?: boolean
@@ -139,6 +142,7 @@ export interface ActionDescriptor {
 export interface ActionRequest {
   kind: GitActionKind
   refName?: string
+  remoteName?: string
   oid?: string
   name?: string
 }
