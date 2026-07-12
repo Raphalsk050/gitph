@@ -36,11 +36,7 @@ export class GitActionService {
       return [this.fetchAll(), this.pullFf(), this.pushHead()].map((plan) => plan.descriptor)
     }
     if (ref.kind === 'local_branch') {
-      const publishPlans = this.publishPlans(ref, refs, remotes)
-      const plans = ref.isHead
-        ? (publishPlans.length > 0 ? publishPlans : [this.pullFf(), this.pushHead()])
-        : [...publishPlans, this.switchBranch(ref), this.mergeBranch(ref), this.rebaseOntoBranch(ref), this.deleteBranch(ref)]
-      return plans.map((plan) => plan.descriptor)
+      return this.localBranchPlans(ref, refs, remotes).map((plan) => plan.descriptor)
     }
     if (ref.kind === 'remote_branch') {
       return [this.trackRemote(ref).descriptor, this.fetchRemote(ref).descriptor]
@@ -77,6 +73,10 @@ export class GitActionService {
         return this.pullFf()
       case 'push_head':
         return this.pushHead()
+      case 'push_branch':
+        return this.pushBranch(this.requireRef(request, refs, 'local_branch'))
+      case 'rename_branch':
+        return this.renameBranch(this.requireRef(request, refs, 'local_branch'), validateRefName(request.name))
       case 'publish_branch':
         return this.publishBranch(
           this.requireRef(request, refs, 'local_branch'),
@@ -169,6 +169,32 @@ export class GitActionService {
     return this.plan('push_head', 'Push current branch', 'upstream', ['push'])
   }
 
+  /**
+   * The full action set GitKraken offers on a local branch. For a branch that
+   * only exists locally the publish plan is the "push" (it pushes and sets the
+   * upstream); once tracked, a plain push/pull applies. Merge, rebase, rename
+   * and delete round out the branch operations, mirroring GitKraken's menu.
+   */
+  private localBranchPlans(ref: GitRef, refs: readonly GitRef[], remotes: readonly string[]): ActionPlan[] {
+    const publishPlans = this.publishPlans(ref, refs, remotes)
+    const plans: ActionPlan[] = []
+
+    // Push: publish (set upstream) while local-only, otherwise a real push.
+    if (publishPlans.length > 0) plans.push(...publishPlans)
+    else if (ref.isHead) plans.push(this.pushHead())
+    else if (ref.upstream) plans.push(this.pushBranch(ref))
+
+    if (ref.isHead) {
+      if (publishPlans.length === 0) plans.push(this.pullFf())
+    } else {
+      plans.push(this.switchBranch(ref), this.mergeBranch(ref), this.rebaseOntoBranch(ref))
+    }
+
+    plans.push(this.renameBranch(ref))
+    if (!ref.isHead) plans.push(this.deleteBranch(ref))
+    return plans
+  }
+
   private publishPlans(ref: GitRef, refs: readonly GitRef[], remotes: readonly string[]): ActionPlan[] {
     return this.publishCandidates(ref, remotes)
       .filter((remote) => !refs.some((candidate) => candidate.fullName === `refs/remotes/${remote}/${ref.shortName}`))
@@ -221,6 +247,34 @@ export class GitActionService {
       ref.shortName,
       ['rebase', ref.shortName],
       { refName: ref.fullName, requiresCleanTree: true, riskLevel: 'high' }
+    )
+  }
+
+  /**
+   * Pushes a specific local branch to its configured upstream. Unlike
+   * `pushHead` this works when the branch is not currently checked out, using an
+   * explicit refspec so only the named branch is pushed.
+   */
+  private pushBranch(ref: GitRef): ActionPlan {
+    const separator = ref.upstream?.indexOf('/') ?? -1
+    const remote = separator > 0 ? ref.upstream!.slice(0, separator) : (ref.upstream ?? '')
+    const remoteBranch = separator > 0 ? ref.upstream!.slice(separator + 1) : ref.shortName
+    return this.plan(
+      'push_branch',
+      `Push ${ref.shortName}`,
+      remote,
+      ['push', '--', remote, `refs/heads/${ref.shortName}:refs/heads/${remoteBranch}`],
+      { refName: ref.fullName, remoteName: remote }
+    )
+  }
+
+  private renameBranch(ref: GitRef, name?: string): ActionPlan {
+    return this.plan(
+      'rename_branch',
+      `Rename ${ref.shortName}`,
+      ref.shortName,
+      ['branch', '--move', ref.shortName, name ?? NAME_TOKEN],
+      { refName: ref.fullName, requiresName: true, namePlaceholder: 'new branch name' }
     )
   }
 

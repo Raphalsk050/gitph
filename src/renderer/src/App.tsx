@@ -11,6 +11,7 @@ import {
   GitBranchPlus,
   GitCommitHorizontal,
   GitMerge,
+  PencilLine,
   RefreshCw,
   RotateCcw,
   Spline,
@@ -48,11 +49,13 @@ const ACTION_ICONS: Record<GitActionKind, LucideIcon> = {
   fetch_remote: ArrowDownToLine,
   pull_ff: ArrowDownToLine,
   push_head: ArrowUpFromLine,
+  push_branch: ArrowUpFromLine,
   publish_branch: ArrowUpFromLine,
   switch_branch: ArrowRightLeft,
   track_remote: GitBranchPlus,
   merge_branch: GitMerge,
   rebase_onto_branch: Spline,
+  rename_branch: PencilLine,
   delete_branch: Trash2,
   checkout_tag: Tag,
   delete_tag: Trash2,
@@ -221,6 +224,14 @@ export function App(): React.JSX.Element {
     if (ref) setSelectedRefName(ref.fullName)
     const actions = await workspace.listActions(ref?.fullName)
     const items: ContextMenuItem[] = actions.map(actionMenuItem)
+    if (ref && (ref.kind === 'local_branch' || ref.kind === 'remote_branch')) {
+      items.push({
+        id: 'copy-branch-name',
+        label: 'Copy branch name',
+        icon: Copy,
+        onSelect: () => void workspace.copyText(ref.shortName)
+      })
+    }
     items.push({
       id: 'open-repository',
       label: 'Open repository…',
