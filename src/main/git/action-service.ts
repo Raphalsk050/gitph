@@ -82,6 +82,16 @@ export class GitActionService {
           this.requireRef(request, refs, 'local_branch'),
           this.requireRemote(request, remotes)
         )
+      case 'set_upstream': {
+        const local = this.requireRef(request, refs, 'local_branch')
+        const remoteRef = refs.find(
+          (candidate) => candidate.kind === 'remote_branch' && candidate.shortName === request.remoteName
+        )
+        if (remoteRef === undefined) {
+          throw new Error('The upstream branch no longer exists. Refresh the repository.')
+        }
+        return this.setUpstream(local, remoteRef)
+      }
       case 'switch_branch':
         return this.switchBranch(this.requireRef(request, refs, 'local_branch'))
       case 'merge_branch':
@@ -177,22 +187,45 @@ export class GitActionService {
    */
   private localBranchPlans(ref: GitRef, refs: readonly GitRef[], remotes: readonly string[]): ActionPlan[] {
     const publishPlans = this.publishPlans(ref, refs, remotes)
+    const tracked = ref.upstream !== null
     const plans: ActionPlan[] = []
 
     // Push: publish (set upstream) while local-only, otherwise a real push.
     if (publishPlans.length > 0) plans.push(...publishPlans)
     else if (ref.isHead) plans.push(this.pushHead())
-    else if (ref.upstream) plans.push(this.pushBranch(ref))
+    else if (tracked) plans.push(this.pushBranch(ref))
 
-    if (ref.isHead) {
-      if (publishPlans.length === 0) plans.push(this.pullFf())
-    } else {
+    // Pull only makes sense for the checked-out branch that tracks a remote.
+    if (ref.isHead && tracked) plans.push(this.pullFf())
+
+    // Set upstream: offer any remote branch of the same name not already tracked.
+    plans.push(...this.setUpstreamPlans(ref, refs))
+
+    if (!ref.isHead) {
       plans.push(this.switchBranch(ref), this.mergeBranch(ref), this.rebaseOntoBranch(ref))
     }
 
     plans.push(this.renameBranch(ref))
     if (!ref.isHead) plans.push(this.deleteBranch(ref))
     return plans
+  }
+
+  private setUpstreamPlans(ref: GitRef, refs: readonly GitRef[]): ActionPlan[] {
+    return refs
+      .filter((candidate) => candidate.kind === 'remote_branch' && !candidate.fullName.endsWith('/HEAD'))
+      .filter((candidate) => remoteBranchLeaf(candidate.shortName) === ref.shortName)
+      .filter((candidate) => candidate.shortName !== ref.upstream)
+      .map((candidate) => this.setUpstream(ref, candidate))
+  }
+
+  private setUpstream(ref: GitRef, remoteRef: GitRef): ActionPlan {
+    return this.plan(
+      'set_upstream',
+      `Set upstream to ${remoteRef.shortName}`,
+      remoteRef.shortName,
+      ['branch', `--set-upstream-to=${remoteRef.shortName}`, '--', ref.shortName],
+      { refName: ref.fullName, remoteName: remoteRef.shortName }
+    )
   }
 
   private publishPlans(ref: GitRef, refs: readonly GitRef[], remotes: readonly string[]): ActionPlan[] {
@@ -214,11 +247,14 @@ export class GitActionService {
   }
 
   private publishBranch(ref: GitRef, remote: string): ActionPlan {
+    // The remote must be a positional argument: `git push --set-upstream <remote>
+    // <refspec>`. Passing it via `--repo=` makes git read the refspec itself as
+    // the <repository> argument, which is what broke publishing.
     return this.plan(
       'publish_branch',
       `Publish ${ref.shortName} to ${remote}`,
       remote,
-      ['push', '--set-upstream', `--repo=${remote}`, `${ref.fullName}:${ref.fullName}`],
+      ['push', '--set-upstream', '--', remote, `${ref.fullName}:${ref.fullName}`],
       { refName: ref.fullName, remoteName: remote }
     )
   }
@@ -451,6 +487,12 @@ function validateRefName(name: string | undefined): string {
     throw new Error(`"${trimmed}" is not a valid ref name.`)
   }
   return trimmed
+}
+
+/** The branch part of a remote-tracking ref's short name (`origin/x/y` → `x/y`). */
+function remoteBranchLeaf(shortName: string): string {
+  const separator = shortName.indexOf('/')
+  return separator >= 0 ? shortName.slice(separator + 1) : shortName
 }
 
 function assertNever(value: never): never {

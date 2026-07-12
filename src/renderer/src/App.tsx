@@ -11,6 +11,7 @@ import {
   GitBranchPlus,
   GitCommitHorizontal,
   GitMerge,
+  Link2,
   PencilLine,
   RefreshCw,
   RotateCcw,
@@ -51,6 +52,7 @@ const ACTION_ICONS: Record<GitActionKind, LucideIcon> = {
   push_head: ArrowUpFromLine,
   push_branch: ArrowUpFromLine,
   publish_branch: ArrowUpFromLine,
+  set_upstream: Link2,
   switch_branch: ArrowRightLeft,
   track_remote: GitBranchPlus,
   merge_branch: GitMerge,
@@ -222,14 +224,29 @@ export function App(): React.JSX.Element {
   const openRefMenu = async (event: React.MouseEvent, ref?: GitRef): Promise<void> => {
     event.preventDefault()
     if (ref) setSelectedRefName(ref.fullName)
-    const actions = await workspace.listActions(ref?.fullName)
-    const items: ContextMenuItem[] = actions.map(actionMenuItem)
-    if (ref && (ref.kind === 'local_branch' || ref.kind === 'remote_branch')) {
+    const isBranch = ref !== undefined && (ref.kind === 'local_branch' || ref.kind === 'remote_branch')
+    // A branch points at a commit, so — like GitKraken — its menu also carries the
+    // commit-level operations (create branch/tag here, checkout, cherry-pick,
+    // revert, reset) taken from the branch tip.
+    const [branchActions, commitActions] = await Promise.all([
+      workspace.listActions(ref?.fullName),
+      isBranch ? workspace.listActions(undefined, ref.displayOid) : Promise.resolve([])
+    ])
+    const items: ContextMenuItem[] = [...branchActions, ...commitActions].map(actionMenuItem)
+    if (isBranch) {
       items.push({
         id: 'copy-branch-name',
         label: 'Copy branch name',
+        group: 'Copy',
         icon: Copy,
         onSelect: () => void workspace.copyText(ref.shortName)
+      })
+      items.push({
+        id: 'copy-branch-sha',
+        label: 'Copy commit sha',
+        group: 'Copy',
+        icon: Copy,
+        onSelect: () => void workspace.copyText(ref.displayOid)
       })
     }
     items.push({
