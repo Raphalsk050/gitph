@@ -50,23 +50,26 @@
       "package.json"
     ],
     "afterPack": "./scripts/afterPack.cjs",
-    "win": {
-      "target": "nsis"
-    },
     "mac": {
       "target": [
         "dmg",
         "zip"
       ],
       "category": "public.app-category.developer-tools",
-      "identity": null
+      "identity": null,
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
     },
     "linux": {
       "target": [
         "AppImage"
       ],
       "category": "Development",
-      "maintainer": "Rafael Aragao Morais <ram.morais50@gmail.com>"
+      "maintainer": "Rafael Aragao Morais <ram.morais50@gmail.com>",
+      "icon": "build/icon.png"
     }
   },
   "allowScripts": {
