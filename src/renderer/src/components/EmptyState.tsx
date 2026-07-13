@@ -1,4 +1,5 @@
-import { FolderGit2, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import { LogoMark } from './Logo'
 
 export function EmptyState({ loading, onOpen }: { loading: boolean; onOpen(): void }): React.JSX.Element {
   return (
@@ -6,7 +7,7 @@ export function EmptyState({ loading, onOpen }: { loading: boolean; onOpen(): vo
       <div className="empty-illustration">
         <span className="empty-orbit orbit-one" />
         <span className="empty-orbit orbit-two" />
-        <FolderGit2 size={52} />
+        <LogoMark size={92} />
       </div>
       <span className="empty-kicker">Visual Git workspace</span>
       <h1>See the shape of your history.</h1>

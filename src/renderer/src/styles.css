@@ -8,6 +8,12 @@
   --font-sans: "IBM Plex Sans", "Segoe UI", ui-sans-serif, sans-serif;
   --font-display: "IBM Plex Sans", "Segoe UI", ui-sans-serif, sans-serif;
   --font-mono: "IBM Plex Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  --font-brand: "Caprasimo", "IBM Plex Sans", ui-serif, Georgia, serif;
+
+  /* Gitph mascot palette — the logo keeps its own identity apart from the UI accent. */
+  --brand-pink: #f24c8b;
+  --brand-cream: #fbeff2;
+  --brand-ink: #1b1420;
 
   /* Deep Graphite + Iris palette with explicit surface responsibilities. */
   --bg-app: #0a0c11;
@@ -144,16 +150,27 @@ button:disabled {
 }
 
 .titlebar-brand {
-  gap: 7px;
   padding: 0 14px;
-  color: var(--text);
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
 }
 
-.titlebar-brand svg {
-  color: var(--accent);
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-mark {
+  display: block;
+  flex-shrink: 0;
+}
+
+.brand-wordmark {
+  font-family: var(--font-brand);
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: 0.005em;
+  /* Caprasimo sits low on the baseline; nudge it to center against the mark. */
+  transform: translateY(-0.06em);
 }
 
 .titlebar-context {

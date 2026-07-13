@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { GitBranch, Maximize2, Minus, Square, X } from 'lucide-react'
+import { Maximize2, Minus, Square, X } from 'lucide-react'
+import { Logo } from './Logo'
 
 interface TitleBarProps {
   repositoryName: string | null
@@ -23,8 +24,7 @@ export function TitleBar({ repositoryName }: TitleBarProps): React.JSX.Element {
   return (
     <header className="titlebar">
       <div className="titlebar-brand">
-        <GitBranch size={14} strokeWidth={2.4} />
-        <span>gitph</span>
+        <Logo size={18} wordmark={15} />
       </div>
       <div className="titlebar-context">{repositoryName ?? 'Git workspace'}</div>
       <div className="window-controls">
